@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "/usr/bin/php",
+            "args": [
+                "/home/user/Documents/Code/my-crm/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}

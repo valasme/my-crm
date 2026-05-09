@@ -11,7 +11,7 @@ class CompanySeeder extends Seeder
     /**
      * @var int
      */
-    private const COMPANIES_PER_USER = 8;
+    private const COMPANIES_PER_USER = 50;
 
     /**
      * Run the database seeds.
@@ -23,18 +23,37 @@ class CompanySeeder extends Seeder
         }
 
         User::query()
-            ->select("id")
-            ->withCount("companies")
+            ->select('id')
+            ->withCount('companies')
             ->lazyById(250)
             ->each(function (User $user): void {
-                $missingCount =
-                    self::COMPANIES_PER_USER - (int) $user->companies_count;
+                $currentCount = (int) $user->companies_count;
 
-                if ($missingCount <= 0) {
+                if ($currentCount > self::COMPANIES_PER_USER) {
+                    $excessCount = $currentCount - self::COMPANIES_PER_USER;
+
+                    $idsToDelete = Company::query()
+                        ->where('user_id', $user->id)
+                        ->orderByDesc('id')
+                        ->skip(self::COMPANIES_PER_USER)
+                        ->take($excessCount)
+                        ->pluck('id');
+
+                    if ($idsToDelete->isNotEmpty()) {
+                        Company::query()->whereIn('id', $idsToDelete)->delete();
+                    }
+
                     return;
                 }
 
-                Company::factory()->count($missingCount)->for($user)->create();
+                $missingCount = self::COMPANIES_PER_USER - $currentCount;
+
+                if ($missingCount > 0) {
+                    Company::factory()
+                        ->count($missingCount)
+                        ->for($user)
+                        ->create();
+                }
             });
     }
 }

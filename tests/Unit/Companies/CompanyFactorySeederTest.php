@@ -9,7 +9,7 @@ use Tests\TestCase;
 uses(TestCase::class, RefreshDatabase::class);
 
 test(
-    "company factory creates realistic crm records tied to a user",
+    'company factory creates realistic crm records tied to a user',
     function () {
         $company = Company::factory()->create();
 
@@ -20,7 +20,7 @@ test(
             ->and($company->user?->id)
             ->toBe($company->user_id)
             ->and($company->name)
-            ->not->toBe("")
+            ->not->toBe('')
             ->and(Company::statuses())
             ->toContain($company->status)
             ->and($company->is_active === true || $company->is_active === false)
@@ -66,7 +66,7 @@ test(
 );
 
 test(
-    "company factory can generate unique companies for the same user",
+    'company factory can generate unique companies for the same user',
     function () {
         $user = User::factory()->create();
 
@@ -74,13 +74,13 @@ test(
 
         expect($companies)
             ->toHaveCount(12)
-            ->and($companies->pluck("name")->unique()->count())
+            ->and($companies->pluck('name')->unique()->count())
             ->toBe(12)
-            ->and($companies->pluck("user_id")->unique()->all())
+            ->and($companies->pluck('user_id')->unique()->all())
             ->toBe([$user->id])
             ->and(
                 $companies
-                    ->pluck("status")
+                    ->pluck('status')
                     ->diff(Company::statuses())
                     ->isEmpty(),
             )
@@ -90,25 +90,25 @@ test(
     },
 );
 
-test("company seeder creates companies for every existing user", function () {
+test('company seeder creates companies for every existing user', function () {
     $users = User::factory()->count(3)->create();
 
     $this->seed(CompanySeeder::class);
 
-    expect(Company::query()->count())->toBe($users->count() * 8);
+    expect(Company::query()->count())->toBe($users->count() * 50);
 
     $users->each(function (User $user): void {
         $companies = $user->fresh()->companies;
 
         expect($companies)
-            ->toHaveCount(8)
-            ->and($companies->pluck("user_id")->unique()->all())
+            ->toHaveCount(50)
+            ->and($companies->pluck('user_id')->unique()->all())
             ->toBe([$user->id])
-            ->and($companies->pluck("name")->unique()->count())
-            ->toBe(8)
+            ->and($companies->pluck('name')->unique()->count())
+            ->toBe(50)
             ->and(
                 $companies
-                    ->pluck("status")
+                    ->pluck('status')
                     ->diff(Company::statuses())
                     ->isEmpty(),
             )
@@ -116,12 +116,12 @@ test("company seeder creates companies for every existing user", function () {
     });
 
     expect(
-        Company::query()->pluck("status")->diff(Company::statuses())->isEmpty(),
+        Company::query()->pluck('status')->diff(Company::statuses())->isEmpty(),
     )->toBeTrue();
 });
 
 test(
-    "company seeder tops up each user to the target count and remains idempotent",
+    'company seeder normalizes each user to the target count and remains idempotent',
     function () {
         $userA = User::factory()->create();
         $userB = User::factory()->create();
@@ -129,32 +129,32 @@ test(
         $userD = User::factory()->create();
 
         Company::factory()->count(3)->for($userA)->create();
-        Company::factory()->count(8)->for($userB)->create();
+        Company::factory()->count(50)->for($userB)->create();
 
-        $overSeeded = Company::factory()->count(11)->for($userC)->create();
-        $overSeededIds = $overSeeded->pluck("id")->all();
+        $overSeeded = Company::factory()->count(51)->for($userC)->create();
+        $overSeededIds = $overSeeded->pluck('id')->all();
 
         $this->seed(CompanySeeder::class);
 
         expect($userA->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and($userB->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and($userC->fresh()->companies()->count())
-            ->toBe(11)
+            ->toBe(50)
             ->and($userD->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and(Company::query()->count())
-            ->toBe(35)
-            ->and(Company::query()->whereIn("id", $overSeededIds)->count())
-            ->toBe(count($overSeededIds));
+            ->toBe(200)
+            ->and(Company::query()->whereIn('id', $overSeededIds)->count())
+            ->toBe(count($overSeededIds) - 1);
 
         collect([$userA, $userB, $userC, $userD])->each(function (
             User $user,
         ): void {
             $companies = $user->fresh()->companies;
 
-            expect($companies->pluck("name")->unique()->count())->toBe(
+            expect($companies->pluck('name')->unique()->count())->toBe(
                 $companies->count(),
             );
         });
@@ -162,20 +162,20 @@ test(
         $this->seed(CompanySeeder::class);
 
         expect($userA->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and($userB->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and($userC->fresh()->companies()->count())
-            ->toBe(11)
+            ->toBe(50)
             ->and($userD->fresh()->companies()->count())
-            ->toBe(8)
+            ->toBe(50)
             ->and(Company::query()->count())
-            ->toBe(35);
+            ->toBe(200);
     },
 );
 
 test(
-    "company seeder does not create companies when there are no users",
+    'company seeder does not create companies when there are no users',
     function () {
         expect(User::query()->count())
             ->toBe(0)
