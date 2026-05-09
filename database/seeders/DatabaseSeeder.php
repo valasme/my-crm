@@ -15,14 +15,16 @@ class DatabaseSeeder extends Seeder
         // User::factory(10)->create();
 
         User::query()->firstOrCreate(
-            ["email" => "test@example.com"],
+            ['email' => 'test@example.com'],
             [
-                "name" => "Test User",
-                "password" => "password",
-                "email_verified_at" => now(),
+                'name' => 'Test User',
+                'password' => 'password',
+                'email_verified_at' => now(),
             ],
         );
 
         $this->call(CompanySeeder::class);
+        $this->call(ContactSeeder::class);
+        $this->call(ActivitySeeder::class);
     }
 }

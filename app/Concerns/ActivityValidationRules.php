@@ -1,0 +1,141 @@
+<?php
+
+namespace App\Concerns;
+
+use App\Models\Activity;
+use App\Models\Company;
+use App\Models\Contact;
+use Illuminate\Contracts\Validation\ValidationRule;
+use Illuminate\Validation\Rule;
+
+trait ActivityValidationRules
+{
+    /**
+     * Get the validation rules for storing/updating an activity.
+     *
+     * @return array<string, array<int, ValidationRule|array<mixed>|string>>
+     */
+    protected function activityRules(
+        int $userId,
+        ?int $activityId = null,
+    ): array {
+        return [
+            'user_id' => ['prohibited'],
+            'company_id' => [
+                'nullable',
+                'integer',
+                Rule::exists(Company::class, 'id')->where(
+                    fn ($query) => $query->where('user_id', $userId),
+                ),
+            ],
+            'contact_id' => [
+                'nullable',
+                'integer',
+                Rule::exists(Contact::class, 'id')->where(
+                    fn ($query) => $query->where('user_id', $userId),
+                ),
+            ],
+            'name' => $this->nameRules($userId, $activityId),
+            'type' => ['required', 'string', Rule::in(Activity::types())],
+            'status' => ['required', 'string', Rule::in(Activity::statuses())],
+            'source' => ['nullable', 'string', 'max:120'],
+            'activity_at' => ['required', 'date'],
+            'next_follow_up_at' => [
+                'nullable',
+                'date',
+                'after_or_equal:activity_at',
+            ],
+            'is_active' => ['required', 'boolean'],
+            'outcome' => ['nullable', 'string', 'max:1000'],
+            'notes' => ['nullable', 'string', 'max:5000'],
+        ];
+    }
+
+    /**
+     * Get the validation rules for the activity name field.
+     *
+     * @return array<int, ValidationRule|array<mixed>|string>
+     */
+    protected function nameRules(int $userId, ?int $activityId = null): array
+    {
+        $unique = Rule::unique(Activity::class, 'name')->where(
+            fn ($query) => $query->where('user_id', $userId),
+        );
+
+        if ($activityId !== null) {
+            $unique = $unique->ignore($activityId);
+        }
+
+        return ['required', 'string', 'max:255', $unique];
+    }
+
+    /**
+     * Sanitize incoming payload before validating.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    protected function sanitizeActivityInput(array $input): array
+    {
+        $stringFields = ['name', 'type', 'status', 'source', 'outcome'];
+
+        foreach ($stringFields as $field) {
+            if (! array_key_exists($field, $input)) {
+                continue;
+            }
+
+            if (! is_string($input[$field])) {
+                continue;
+            }
+
+            $value = trim(strip_tags($input[$field]));
+            $input[$field] = $value === '' ? null : $value;
+        }
+
+        if (array_key_exists('notes', $input) && is_string($input['notes'])) {
+            $notes = trim(strip_tags($input['notes']));
+            $input['notes'] =
+                $notes === '' ? null : preg_replace('/\r\n|\r/', "\n", $notes);
+        }
+
+        if (is_string($input['status'] ?? null)) {
+            $input['status'] = strtolower($input['status']);
+        }
+
+        if (is_string($input['type'] ?? null)) {
+            $input['type'] = strtolower($input['type']);
+        }
+
+        foreach (['company_id', 'contact_id'] as $foreignKeyField) {
+            if (
+                array_key_exists($foreignKeyField, $input) &&
+                $input[$foreignKeyField] === ''
+            ) {
+                $input[$foreignKeyField] = null;
+            }
+        }
+
+        foreach (['activity_at', 'next_follow_up_at'] as $dateField) {
+            if (
+                array_key_exists($dateField, $input) &&
+                $input[$dateField] === ''
+            ) {
+                $input[$dateField] = null;
+            }
+        }
+
+        if (array_key_exists('is_active', $input)) {
+            $bool = filter_var(
+                $input['is_active'],
+                FILTER_VALIDATE_BOOLEAN,
+                FILTER_NULL_ON_FAILURE,
+            );
+
+            if ($bool !== null) {
+                $input['is_active'] = $bool;
+            }
+        }
+
+        return $input;
+    }
+}

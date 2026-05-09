@@ -2,16 +2,16 @@
 
 namespace App\Models;
 
-use Database\Factories\CompanyFactory;
+use Database\Factories\ContactFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Company extends Model
+class Contact extends Model
 {
-    /** @use HasFactory<CompanyFactory> */
+    /** @use HasFactory<ContactFactory> */
     use HasFactory;
 
     /**
@@ -33,33 +33,26 @@ class Company extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'company_id',
         'name',
-        'legal_name',
+        'job_title',
         'status',
-        'industry',
+        'department',
         'source',
-        'ownership_type',
-        'founded_year',
-        'employee_count',
-        'annual_revenue',
-        'website',
-        'linkedin_url',
         'email',
-        'billing_email',
+        'alternate_email',
         'phone',
-        'support_phone',
+        'mobile_phone',
+        'linkedin_url',
         'timezone',
         'preferred_contact_method',
-        'tax_id',
-        'primary_contact_name',
-        'primary_contact_email',
-        'primary_contact_phone',
         'address_line_1',
         'address_line_2',
         'city',
         'state',
         'postal_code',
         'country',
+        'birthday',
         'last_contacted_at',
         'next_follow_up_at',
         'is_active',
@@ -74,9 +67,7 @@ class Company extends Model
     protected function casts(): array
     {
         return [
-            'founded_year' => 'integer',
-            'annual_revenue' => 'decimal:2',
-            'employee_count' => 'integer',
+            'birthday' => 'date',
             'last_contacted_at' => 'date',
             'next_follow_up_at' => 'date',
             'is_active' => 'boolean',
@@ -100,10 +91,10 @@ class Company extends Model
     }
 
     /**
-     * Scope a query to companies owned by a given user.
+     * Scope a query to contacts owned by a given user.
      *
-     * @param  Builder<Company>  $query
-     * @return Builder<Company>
+     * @param  Builder<Contact>  $query
+     * @return Builder<Contact>
      */
     public function scopeOwnedBy(Builder $query, User $user): Builder
     {
@@ -111,9 +102,9 @@ class Company extends Model
     }
 
     /**
-     * Get the user that owns the company.
+     * Get the user that owns the contact.
      *
-     * @return BelongsTo<User, Company>
+     * @return BelongsTo<User, Contact>
      */
     public function user(): BelongsTo
     {
@@ -121,17 +112,17 @@ class Company extends Model
     }
 
     /**
-     * Get contacts associated with the company.
+     * Get the company associated with the contact.
      *
-     * @return HasMany<Contact>
+     * @return BelongsTo<Company, Contact>
      */
-    public function contacts(): HasMany
+    public function company(): BelongsTo
     {
-        return $this->hasMany(Contact::class);
+        return $this->belongsTo(Company::class);
     }
 
     /**
-     * Get activities associated with the company.
+     * Get activities associated with the contact.
      *
      * @return HasMany<Activity>
      */

@@ -45,6 +45,22 @@ new #[Title("Edit Company")] class extends Component {
 ?>
 
 <div class="mx-auto flex h-full w-full max-w-[120rem] flex-1 flex-col gap-6 rounded-xl">
+    @php
+        $indexQuery = array_filter(
+            request()->only([
+                'search',
+                'status',
+                'active',
+                'follow_up',
+                'sort',
+                'direction',
+                'per_page',
+                'page',
+            ]),
+            fn ($value): bool => $value !== '' && $value !== null,
+        );
+    @endphp
+
     <div class="space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="space-y-1">
@@ -55,17 +71,17 @@ new #[Title("Edit Company")] class extends Component {
             </div>
 
             <div class="flex flex-wrap gap-2">
-                <flux:button variant="ghost" :href="route('companies.show', $company)" wire:navigate>
+                <flux:button variant="ghost" :href="route('companies.show', ['company' => $company, ...$indexQuery])" wire:navigate>
                     {{ __('View') }}
                 </flux:button>
-                <flux:button variant="ghost" :href="route('companies.index')" wire:navigate>
+                <flux:button variant="ghost" :href="route('companies.index', $indexQuery)" wire:navigate>
                     {{ __('Companies') }}
                 </flux:button>
             </div>
         </div>
 
         <div class="border-t border-zinc-200 pt-3 dark:border-zinc-700">
-            <flux:button type="button" variant="ghost" :href="route('companies.show', $company)" wire:navigate>
+            <flux:button type="button" variant="ghost" :href="route('companies.show', ['company' => $company, ...$indexQuery])" wire:navigate>
                 <flux:icon.arrow-left variant="micro" />
                 {{ __('Back') }}
             </flux:button>
@@ -268,7 +284,7 @@ new #[Title("Edit Company")] class extends Component {
         </flux:card>
 
         <div class="flex flex-wrap items-center justify-end gap-3">
-            <flux:button variant="ghost" :href="route('companies.show', $company)" wire:navigate>
+            <flux:button variant="ghost" :href="route('companies.show', ['company' => $company, ...$indexQuery])" wire:navigate>
                 {{ __('Cancel') }}
             </flux:button>
 

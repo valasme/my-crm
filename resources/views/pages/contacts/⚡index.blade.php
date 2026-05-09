@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -13,7 +14,7 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
-new #[Title("Companies")] class extends Component {
+new #[Title("Contacts")] class extends Component {
     use WithPagination;
 
     /**
@@ -60,6 +61,9 @@ new #[Title("Companies")] class extends Component {
     public string $followUp = "all";
 
     #[Url(keep: true)]
+    public string $company = "all";
+
+    #[Url(keep: true)]
     public string $sort = "updated_at";
 
     #[Url(keep: true)]
@@ -73,13 +77,13 @@ new #[Title("Companies")] class extends Component {
      */
     public function mount(): void
     {
-        Gate::authorize("viewAny", Company::class);
+        Gate::authorize("viewAny", Contact::class);
 
         $this->sanitizeFilters();
     }
 
     /**
-     * @return array{search:string,status:string,active:string,follow_up:string,sort:string,direction:string,per_page:int}
+     * @return array{search:string,status:string,active:string,follow_up:string,company:string,sort:string,direction:string,per_page:int}
      */
     #[Computed]
     public function filters(): array
@@ -89,6 +93,7 @@ new #[Title("Companies")] class extends Component {
             "status" => $this->status,
             "active" => $this->active,
             "follow_up" => $this->followUp,
+            "company" => $this->company,
             "sort" => $this->sort,
             "direction" => $this->direction,
             "per_page" => $this->perPage,
@@ -96,7 +101,7 @@ new #[Title("Companies")] class extends Component {
     }
 
     #[Computed]
-    public function companies(): LengthAwarePaginator
+    public function contacts(): LengthAwarePaginator
     {
         /** @var User $user */
         $user = Auth::user();
@@ -109,16 +114,18 @@ new #[Title("Companies")] class extends Component {
 
         $today = now()->toDateString();
 
-        $companies = $user
-            ->companies()
+        $contacts = $user
+            ->contacts()
+            ->with("company:id,name,user_id")
             ->select([
                 "id",
+                "company_id",
                 "name",
-                "industry",
+                "job_title",
                 "status",
                 "is_active",
-                "primary_contact_name",
-                "primary_contact_email",
+                "email",
+                "phone",
                 "preferred_contact_method",
                 "next_follow_up_at",
                 "updated_at",
@@ -128,6 +135,9 @@ new #[Title("Companies")] class extends Component {
             })
             ->when($this->active !== "all", function (Builder $query): void {
                 $query->where("is_active", $this->active === "active");
+            })
+            ->when($this->company !== "all", function (Builder $query): void {
+                $query->where("company_id", (int) $this->company);
             })
             ->when($this->followUp !== "all", function (Builder $query) use (
                 $today,
@@ -155,35 +165,41 @@ new #[Title("Companies")] class extends Component {
                     ): void {
                         $innerQuery
                             ->where("name", "like", $likeTerm)
-                            ->orWhere("legal_name", "like", $likeTerm)
-                            ->orWhere("industry", "like", $likeTerm)
+                            ->orWhere("job_title", "like", $likeTerm)
+                            ->orWhere("department", "like", $likeTerm)
                             ->orWhere("source", "like", $likeTerm)
-                            ->orWhere("primary_contact_name", "like", $likeTerm)
-                            ->orWhere(
-                                "primary_contact_email",
-                                "like",
-                                $likeTerm,
-                            )
                             ->orWhere("email", "like", $likeTerm)
+                            ->orWhere("alternate_email", "like", $likeTerm)
                             ->orWhere("phone", "like", $likeTerm)
+                            ->orWhere("mobile_phone", "like", $likeTerm)
                             ->orWhere("status", "like", $likeTerm)
                             ->orWhere("city", "like", $likeTerm)
-                            ->orWhere("country", "like", $likeTerm);
+                            ->orWhere("country", "like", $likeTerm)
+                            ->orWhereHas(
+                                "company",
+                                fn(
+                                    Builder $companyQuery,
+                                ): Builder => $companyQuery->where(
+                                    "name",
+                                    "like",
+                                    $likeTerm,
+                                ),
+                            );
                     });
                 }
             });
 
         if ($this->sort === "next_follow_up_at") {
-            $companies
+            $contacts
                 ->orderByRaw(
                     "case when next_follow_up_at is null then 1 else 0 end",
                 )
                 ->orderBy("next_follow_up_at", $this->direction);
         } else {
-            $companies->orderBy($this->sort, $this->direction);
+            $contacts->orderBy($this->sort, $this->direction);
         }
 
-        return $companies
+        return $contacts
             ->orderByDesc("id")
             ->paginate($this->perPage)
             ->withQueryString();
@@ -197,7 +213,7 @@ new #[Title("Companies")] class extends Component {
     {
         return array_merge(
             ["all" => __("All")],
-            collect(Company::statuses())
+            collect(Contact::statuses())
                 ->mapWithKeys(
                     fn(string $status): array => [
                         $status => Str::headline($status),
@@ -218,6 +234,27 @@ new #[Title("Companies")] class extends Component {
             "active" => __("Active"),
             "inactive" => __("Inactive"),
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function companyOptions(): array
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        return ["all" => __("All companies")] +
+            $user
+                ->companies()
+                ->select(["id", "name"])
+                ->orderBy("name")
+                ->pluck("name", "id")
+                ->mapWithKeys(
+                    fn(string $name, int $id): array => [(string) $id => $name],
+                )
+                ->all();
     }
 
     /**
@@ -271,6 +308,12 @@ new #[Title("Companies")] class extends Component {
     }
 
     #[Computed]
+    public function companyLabel(): string
+    {
+        return $this->companyOptions[$this->company] ?? __("All companies");
+    }
+
+    #[Computed]
     public function followUpLabel(): string
     {
         return $this->followUpOptions[$this->followUp] ?? __("All");
@@ -298,7 +341,7 @@ new #[Title("Companies")] class extends Component {
             ->limit(120, "")
             ->toString();
 
-        $allowedStatuses = array_merge(["all"], Company::statuses());
+        $allowedStatuses = array_merge(["all"], Contact::statuses());
 
         if (!in_array($this->status, $allowedStatuses, true)) {
             $this->status = "all";
@@ -310,6 +353,27 @@ new #[Title("Companies")] class extends Component {
 
         if (!in_array($this->followUp, self::FOLLOW_UP_FILTERS, true)) {
             $this->followUp = "all";
+        }
+
+        if ($this->company !== "all") {
+            $companyId = filter_var($this->company, FILTER_VALIDATE_INT, [
+                "options" => ["min_range" => 1],
+            ]);
+
+            if ($companyId === false) {
+                $this->company = "all";
+            } else {
+                if (
+                    !Company::query()
+                        ->where("user_id", Auth::id())
+                        ->whereKey((int) $companyId)
+                        ->exists()
+                ) {
+                    $this->company = "all";
+                } else {
+                    $this->company = (string) $companyId;
+                }
+            }
         }
 
         if (!in_array($this->sort, self::SORTABLE_COLUMNS, true)) {
@@ -334,10 +398,11 @@ new #[Title("Companies")] class extends Component {
 <div class="mx-auto flex h-full w-full max-w-[120rem] flex-1 flex-col gap-6 rounded-xl">
     @php
         $filters = $this->filters;
-        $companies = $this->companies;
+        $contacts = $this->contacts;
         $sortOptions = $this->sortOptions;
         $statusOptions = $this->statusOptions;
         $activeOptions = $this->activeOptions;
+        $companyOptions = $this->companyOptions;
         $followUpOptions = $this->followUpOptions;
 
         $withQuery = fn (array $changes): array => array_filter(
@@ -346,20 +411,20 @@ new #[Title("Companies")] class extends Component {
         );
 
         $indexQuery = $withQuery([
-            'page' => $companies->currentPage() > 1 ? $companies->currentPage() : null,
+            'page' => $contacts->currentPage() > 1 ? $contacts->currentPage() : null,
         ]);
     @endphp
 
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="space-y-1">
-            <flux:heading size="xl" as="h1" id="companies-heading" aria-label="{{ __('Companies') }}">
-                {{ __('Companies') }}
+            <flux:heading size="xl" as="h1" id="contacts-heading" aria-label="{{ __('Contacts') }}">
+                {{ __('Contacts') }}
             </flux:heading>
-            <flux:subheading>{{ __('Track and manage your company accounts.') }}</flux:subheading>
+            <flux:subheading>{{ __('Track and manage your people and company relationships.') }}</flux:subheading>
         </div>
 
-        <flux:button variant="primary" :href="route('companies.create', $indexQuery)" wire:navigate>
-            {{ __('New Company') }}
+        <flux:button variant="primary" :href="route('contacts.create', $indexQuery)" wire:navigate>
+            {{ __('New Contact') }}
         </flux:button>
     </div>
 
@@ -369,17 +434,18 @@ new #[Title("Companies")] class extends Component {
         </div>
     @endif
 
-    @if ($errors->has('company'))
+    @if ($errors->has('contact'))
         <div role="alert" aria-live="assertive" aria-atomic="true">
-            <flux:badge variant="solid">{{ $errors->first('company') }}</flux:badge>
+            <flux:badge variant="solid">{{ $errors->first('contact') }}</flux:badge>
         </div>
     @endif
 
     <flux:card>
-        <form method="GET" action="{{ route('companies.index') }}" class="flex flex-wrap items-end gap-3">
+        <form method="GET" action="{{ route('contacts.index') }}" class="flex flex-wrap items-end gap-3">
             <input type="hidden" name="status" value="{{ $filters['status'] }}">
             <input type="hidden" name="active" value="{{ $filters['active'] }}">
             <input type="hidden" name="follow_up" value="{{ $filters['follow_up'] }}">
+            <input type="hidden" name="company" value="{{ $filters['company'] }}">
             <input type="hidden" name="sort" value="{{ $filters['sort'] }}">
             <input type="hidden" name="direction" value="{{ $filters['direction'] }}">
             <input type="hidden" name="per_page" value="{{ $filters['per_page'] }}">
@@ -390,8 +456,8 @@ new #[Title("Companies")] class extends Component {
                     :label="__('Search')"
                     :value="$filters['search']"
                     type="search"
-                    :placeholder="__('Search by company, contact, industry, location, or status')"
-                    aria-label="{{ __('Search companies') }}"
+                    :placeholder="__('Search by contact, company, email, phone, department, or status')"
+                    aria-label="{{ __('Search contacts') }}"
                 />
             </div>
 
@@ -399,7 +465,7 @@ new #[Title("Companies")] class extends Component {
                 <flux:button type="submit" variant="primary">{{ __('Search') }}</flux:button>
 
                 @if ($filters['search'] !== '')
-                    <flux:button :href="route('companies.index', $withQuery(['search' => null]))" variant="ghost" wire:navigate>
+                    <flux:button :href="route('contacts.index', $withQuery(['search' => null]))" variant="ghost" wire:navigate>
                         {{ __('Clear search') }}
                     </flux:button>
                 @endif
@@ -416,7 +482,7 @@ new #[Title("Companies")] class extends Component {
                     <flux:menu>
                         @foreach ($statusOptions as $value => $label)
                             <flux:menu.item
-                                :href="route('companies.index', $withQuery(['status' => $value]))"
+                                :href="route('contacts.index', $withQuery(['status' => $value]))"
                                 :icon="$filters['status'] === $value ? 'check' : ''"
                                 wire:navigate
                             >
@@ -434,8 +500,26 @@ new #[Title("Companies")] class extends Component {
                     <flux:menu>
                         @foreach ($activeOptions as $value => $label)
                             <flux:menu.item
-                                :href="route('companies.index', $withQuery(['active' => $value]))"
+                                :href="route('contacts.index', $withQuery(['active' => $value]))"
                                 :icon="$filters['active'] === $value ? 'check' : ''"
+                                wire:navigate
+                            >
+                                {{ $label }}
+                            </flux:menu.item>
+                        @endforeach
+                    </flux:menu>
+                </flux:dropdown>
+
+                <flux:dropdown position="bottom" align="start">
+                    <flux:button size="sm" variant="ghost">
+                        {{ __('Company: :value', ['value' => $this->companyLabel]) }}
+                    </flux:button>
+
+                    <flux:menu>
+                        @foreach ($companyOptions as $value => $label)
+                            <flux:menu.item
+                                :href="route('contacts.index', $withQuery(['company' => $value]))"
+                                :icon="$filters['company'] === $value ? 'check' : ''"
                                 wire:navigate
                             >
                                 {{ $label }}
@@ -452,7 +536,7 @@ new #[Title("Companies")] class extends Component {
                     <flux:menu>
                         @foreach ($followUpOptions as $value => $label)
                             <flux:menu.item
-                                :href="route('companies.index', $withQuery(['follow_up' => $value]))"
+                                :href="route('contacts.index', $withQuery(['follow_up' => $value]))"
                                 :icon="$filters['follow_up'] === $value ? 'check' : ''"
                                 wire:navigate
                             >
@@ -470,7 +554,7 @@ new #[Title("Companies")] class extends Component {
                     <flux:menu>
                         @foreach ($sortOptions as $value => $label)
                             <flux:menu.item
-                                :href="route('companies.index', $withQuery(['sort' => $value]))"
+                                :href="route('contacts.index', $withQuery(['sort' => $value]))"
                                 :icon="$filters['sort'] === $value ? 'check' : ''"
                                 wire:navigate
                             >
@@ -487,14 +571,14 @@ new #[Title("Companies")] class extends Component {
 
                     <flux:menu>
                         <flux:menu.item
-                            :href="route('companies.index', $withQuery(['direction' => 'asc']))"
+                            :href="route('contacts.index', $withQuery(['direction' => 'asc']))"
                             :icon="$filters['direction'] === 'asc' ? 'check' : ''"
                             wire:navigate
                         >
                             {{ __('Ascending') }}
                         </flux:menu.item>
                         <flux:menu.item
-                            :href="route('companies.index', $withQuery(['direction' => 'desc']))"
+                            :href="route('contacts.index', $withQuery(['direction' => 'desc']))"
                             :icon="$filters['direction'] === 'desc' ? 'check' : ''"
                             wire:navigate
                         >
@@ -511,7 +595,7 @@ new #[Title("Companies")] class extends Component {
                     <flux:menu>
                         @foreach ($this->perPageOptions as $perPageOption)
                             <flux:menu.item
-                                :href="route('companies.index', $withQuery(['per_page' => $perPageOption]))"
+                                :href="route('contacts.index', $withQuery(['per_page' => $perPageOption]))"
                                 :icon="(int) $filters['per_page'] === $perPageOption ? 'check' : ''"
                                 wire:navigate
                             >
@@ -521,23 +605,24 @@ new #[Title("Companies")] class extends Component {
                     </flux:menu>
                 </flux:dropdown>
 
-                <flux:button size="sm" variant="ghost" :href="route('companies.index')" wire:navigate>
+                <flux:button size="sm" variant="ghost" :href="route('contacts.index')" wire:navigate>
                     {{ __('Reset all filters') }}
                 </flux:button>
             </div>
         </div>
     </flux:card>
 
-    <p id="companies-table-description" class="sr-only">
-        {{ __('A sortable list of your companies with status, contacts, and follow-up dates.') }}
+    <p id="contacts-table-description" class="sr-only">
+        {{ __('A sortable list of your contacts with company assignment, status, and follow-up dates.') }}
     </p>
 
-    <flux:table aria-describedby="companies-table-description">
+    <flux:table aria-describedby="contacts-table-description">
         <flux:table.columns>
-            <flux:table.column>{{ __('Company') }}</flux:table.column>
-            <flux:table.column class="hidden md:table-cell">{{ __('Industry') }}</flux:table.column>
+            <flux:table.column>{{ __('Contact') }}</flux:table.column>
+            <flux:table.column class="hidden md:table-cell">{{ __('Company') }}</flux:table.column>
+            <flux:table.column class="hidden lg:table-cell">{{ __('Job Title') }}</flux:table.column>
             <flux:table.column>{{ __('Status') }}</flux:table.column>
-            <flux:table.column class="hidden sm:table-cell">{{ __('Primary Contact') }}</flux:table.column>
+            <flux:table.column class="hidden sm:table-cell">{{ __('Channels') }}</flux:table.column>
             <flux:table.column class="hidden lg:table-cell">{{ __('Contact Method') }}</flux:table.column>
             <flux:table.column class="hidden md:table-cell">{{ __('Next Follow-up') }}</flux:table.column>
             <flux:table.column class="hidden xl:table-cell">{{ __('Updated') }}</flux:table.column>
@@ -545,52 +630,54 @@ new #[Title("Companies")] class extends Component {
         </flux:table.columns>
 
         <flux:table.rows>
-            @forelse ($companies as $company)
-                <flux:table.row wire:key="company-row-{{ $company->id }}">
+            @forelse ($contacts as $contact)
+                <flux:table.row wire:key="contact-row-{{ $contact->id }}">
                     <flux:table.cell variant="strong">
                         <div class="space-y-1">
-                            <flux:link :href="route('companies.show', ['company' => $company, ...$indexQuery])" wire:navigate>
-                                {{ $company->name }}
+                            <flux:link :href="route('contacts.show', ['contact' => $contact, ...$indexQuery])" wire:navigate>
+                                {{ $contact->name }}
                             </flux:link>
 
                             <div class="space-y-1 text-xs text-zinc-500 md:hidden">
-                                <div>{{ $company->industry ?: __('No industry') }}</div>
-                                <div>{{ __('Follow-up: :date', ['date' => $company->next_follow_up_at?->format('M d, Y') ?: '—']) }}</div>
+                                <div>{{ $contact->company?->name ?: __('No company') }}</div>
+                                <div>{{ $contact->job_title ?: __('No title') }}</div>
+                                <div>{{ __('Follow-up: :date', ['date' => $contact->next_follow_up_at?->format('M d, Y') ?: '—']) }}</div>
                             </div>
 
-                            @if (! $company->is_active)
+                            @if (! $contact->is_active)
                                 <flux:text class="text-xs">{{ __('Inactive') }}</flux:text>
                             @endif
                         </div>
                     </flux:table.cell>
-                    <flux:table.cell class="hidden md:table-cell">{{ $company->industry ?: '—' }}</flux:table.cell>
+                    <flux:table.cell class="hidden md:table-cell">{{ $contact->company?->name ?: '—' }}</flux:table.cell>
+                    <flux:table.cell class="hidden lg:table-cell">{{ $contact->job_title ?: '—' }}</flux:table.cell>
                     <flux:table.cell>
                         <flux:badge>
-                            {{ \Illuminate\Support\Str::headline($company->status) }}
+                            {{ \Illuminate\Support\Str::headline($contact->status) }}
                         </flux:badge>
                     </flux:table.cell>
                     <flux:table.cell class="hidden sm:table-cell">
                         <div class="space-y-1">
-                            <div>{{ $company->primary_contact_name ?: '—' }}</div>
-                            @if ($company->primary_contact_email)
-                                <flux:text class="text-xs">{{ $company->primary_contact_email }}</flux:text>
+                            <div>{{ $contact->email ?: '—' }}</div>
+                            @if ($contact->phone)
+                                <flux:text class="text-xs">{{ $contact->phone }}</flux:text>
                             @endif
                         </div>
                     </flux:table.cell>
                     <flux:table.cell class="hidden lg:table-cell">
-                        {{ $company->preferred_contact_method ? \Illuminate\Support\Str::headline($company->preferred_contact_method) : '—' }}
+                        {{ $contact->preferred_contact_method ? \Illuminate\Support\Str::headline($contact->preferred_contact_method) : '—' }}
                     </flux:table.cell>
                     <flux:table.cell class="hidden md:table-cell">
-                        {{ $company->next_follow_up_at?->format('M d, Y') ?: '—' }}
+                        {{ $contact->next_follow_up_at?->format('M d, Y') ?: '—' }}
                     </flux:table.cell>
-                    <flux:table.cell class="hidden xl:table-cell">{{ $company->updated_at->diffForHumans() }}</flux:table.cell>
+                    <flux:table.cell class="hidden xl:table-cell">{{ $contact->updated_at->diffForHumans() }}</flux:table.cell>
                     <flux:table.cell align="end">
                         <div class="flex items-center justify-end text-zinc-300">
                             <flux:button
                                 size="xs"
                                 variant="ghost"
-                                :href="route('companies.show', ['company' => $company, ...$indexQuery])"
-                                aria-label="{{ __('View :company', ['company' => $company->name]) }}"
+                                :href="route('contacts.show', ['contact' => $contact, ...$indexQuery])"
+                                aria-label="{{ __('View :contact', ['contact' => $contact->name]) }}"
                                 wire:navigate
                             >
                                 <flux:icon.eye variant="micro" />
@@ -601,8 +688,8 @@ new #[Title("Companies")] class extends Component {
                             <flux:button
                                 size="xs"
                                 variant="ghost"
-                                :href="route('companies.edit', ['company' => $company, ...$indexQuery])"
-                                aria-label="{{ __('Edit :company', ['company' => $company->name]) }}"
+                                :href="route('contacts.edit', ['contact' => $contact, ...$indexQuery])"
+                                aria-label="{{ __('Edit :contact', ['contact' => $contact->name]) }}"
                                 wire:navigate
                             >
                                 <flux:icon.pencil-square variant="micro" />
@@ -612,9 +699,9 @@ new #[Title("Companies")] class extends Component {
 
                             <form
                                 method="POST"
-                                action="{{ route('companies.destroy', $company) }}"
+                                action="{{ route('contacts.destroy', $contact) }}"
                                 class="inline-flex"
-                                onsubmit="return confirm(@js(__('Delete this company? This action cannot be undone.')));"
+                                onsubmit="return confirm(@js(__('Delete this contact? This action cannot be undone.')));"
                             >
                                 @csrf
                                 @method('DELETE')
@@ -623,7 +710,7 @@ new #[Title("Companies")] class extends Component {
                                     size="xs"
                                     variant="ghost"
                                     type="submit"
-                                    aria-label="{{ __('Delete :company', ['company' => $company->name]) }}"
+                                    aria-label="{{ __('Delete :contact', ['contact' => $contact->name]) }}"
                                 >
                                     <flux:icon.trash variant="micro" />
                                 </flux:button>
@@ -633,15 +720,15 @@ new #[Title("Companies")] class extends Component {
                 </flux:table.row>
             @empty
                 <flux:table.row>
-                    <flux:table.cell colspan="8" class="py-10 text-center">
+                    <flux:table.cell colspan="9" class="py-10 text-center">
                         <div class="space-y-3">
-                            <flux:text>{{ __('No companies found with the current search/filter settings.') }}</flux:text>
+                            <flux:text>{{ __('No contacts found with the current search/filter settings.') }}</flux:text>
                             <div class="flex flex-wrap justify-center gap-2">
-                                <flux:button variant="ghost" :href="route('companies.index')" wire:navigate>
+                                <flux:button variant="ghost" :href="route('contacts.index')" wire:navigate>
                                     {{ __('Clear filters') }}
                                 </flux:button>
-                                <flux:button variant="primary" :href="route('companies.create', $indexQuery)" wire:navigate>
-                                    {{ __('Create your first company') }}
+                                <flux:button variant="primary" :href="route('contacts.create', $indexQuery)" wire:navigate>
+                                    {{ __('Create your first contact') }}
                                 </flux:button>
                             </div>
                         </div>
@@ -651,9 +738,9 @@ new #[Title("Companies")] class extends Component {
         </flux:table.rows>
     </flux:table>
 
-    @if ($companies->hasPages())
+    @if ($contacts->hasPages())
         <div class="mt-2">
-            {{ $companies->onEachSide(1)->links('vendor.pagination.tailwind') }}
+            {{ $contacts->onEachSide(1)->links('vendor.pagination.tailwind') }}
         </div>
     @endif
 </div>

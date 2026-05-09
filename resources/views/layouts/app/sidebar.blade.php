@@ -16,8 +16,16 @@
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="building-office-2" :href="route('companies.index')" :current="request()->routeIs('companies.*')" wire:navigate>
-                            {{ __('Companies') }}
-                        </flux:sidebar.item>
+                        {{ __('Companies') }}
+                    </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="user-group" :href="route('contacts.index')" :current="request()->routeIs('contacts.*')" wire:navigate>
+                        {{ __('Contacts') }}
+                    </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="calendar-days" :href="route('activities.index')" :current="request()->routeIs('activities.*')" wire:navigate>
+                        {{ __('Activities') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 

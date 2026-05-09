@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Company;
+use App\Models\Contact;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -8,21 +8,21 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title("Company Details")] class extends Component {
-    public Company $company;
+new #[Title("Contact Details")] class extends Component {
+    public Contact $contact;
 
     /**
      * Mount the component.
      */
-    public function mount(Company $company): void
+    public function mount(Contact $contact): void
     {
-        if ((int) $company->user_id !== (int) Auth::id()) {
+        if ((int) $contact->user_id !== (int) Auth::id()) {
             abort(404);
         }
 
-        $this->company = $company;
+        $this->contact = $contact->loadMissing("company:id,name,user_id");
 
-        Gate::authorize("view", $this->company);
+        Gate::authorize("view", $this->contact);
     }
 
     /**
@@ -31,12 +31,12 @@ new #[Title("Company Details")] class extends Component {
     #[Computed]
     public function recentActivities(): Collection
     {
-        return $this->company
+        return $this->contact
             ->activities()
-            ->with("contact:id,name,user_id")
+            ->with("company:id,name,user_id")
             ->select([
                 "id",
-                "contact_id",
+                "company_id",
                 "name",
                 "type",
                 "status",
@@ -59,6 +59,7 @@ new #[Title("Company Details")] class extends Component {
                 'status',
                 'active',
                 'follow_up',
+                'company',
                 'sort',
                 'direction',
                 'per_page',
@@ -71,49 +72,49 @@ new #[Title("Company Details")] class extends Component {
     <div class="space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="space-y-2">
-                <flux:heading size="xl" as="h1" id="show-company-heading" aria-label="{{ __('Show Company') }}">
-                    {{ $company->name }}
+                <flux:heading size="xl" as="h1" id="show-contact-heading" aria-label="{{ __('Show Contact') }}">
+                    {{ $contact->name }}
                 </flux:heading>
 
                 <div class="flex flex-wrap items-center gap-2">
                     <flux:badge variant="solid">
-                        {{ \Illuminate\Support\Str::headline($company->status) }}
+                        {{ \Illuminate\Support\Str::headline($contact->status) }}
                     </flux:badge>
 
-                    <flux:badge>{{ $company->is_active ? __('Active') : __('Inactive') }}</flux:badge>
+                    <flux:badge>{{ $contact->is_active ? __('Active') : __('Inactive') }}</flux:badge>
 
-                    @if ($company->industry)
-                        <flux:badge>{{ $company->industry }}</flux:badge>
+                    @if ($contact->company)
+                        <flux:badge>{{ $contact->company->name }}</flux:badge>
                     @endif
                 </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
-                <flux:button variant="primary" :href="route('companies.edit', ['company' => $company, ...$indexQuery])" wire:navigate>
+                <flux:button variant="primary" :href="route('contacts.edit', ['contact' => $contact, ...$indexQuery])" wire:navigate>
                     {{ __('Edit') }}
                 </flux:button>
 
                 <form
                     method="POST"
-                    action="{{ route('companies.destroy', $company) }}"
-                    onsubmit="return confirm(@js(__('Delete this company? This action cannot be undone.')));"
+                    action="{{ route('contacts.destroy', $contact) }}"
+                    onsubmit="return confirm(@js(__('Delete this contact? This action cannot be undone.')));"
                     class="inline-flex"
                 >
                     @csrf
                     @method('DELETE')
-                    <flux:button variant="ghost" type="submit" aria-label="{{ __('Delete :company', ['company' => $company->name]) }}">
+                    <flux:button variant="ghost" type="submit" aria-label="{{ __('Delete :contact', ['contact' => $contact->name]) }}">
                         <flux:icon.trash variant="micro" />
                     </flux:button>
                 </form>
 
-                <flux:button variant="ghost" :href="route('companies.index', $indexQuery)" wire:navigate>
-                    {{ __('Companies') }}
+                <flux:button variant="ghost" :href="route('contacts.index', $indexQuery)" wire:navigate>
+                    {{ __('Contacts') }}
                 </flux:button>
             </div>
         </div>
 
         <div class="border-t border-zinc-200 pt-3 dark:border-zinc-700">
-            <flux:button type="button" variant="ghost" :href="route('companies.index', $indexQuery)" wire:navigate>
+            <flux:button type="button" variant="ghost" :href="route('contacts.index', $indexQuery)" wire:navigate>
                 <flux:icon.arrow-left variant="micro" />
                 {{ __('Back') }}
             </flux:button>
@@ -126,108 +127,79 @@ new #[Title("Company Details")] class extends Component {
         </div>
     @endif
 
-    @if ($errors->has('company'))
+    @if ($errors->has('contact'))
         <div role="alert" aria-live="assertive" aria-atomic="true">
-            <flux:badge variant="solid">{{ $errors->first('company') }}</flux:badge>
+            <flux:badge variant="solid">{{ $errors->first('contact') }}</flux:badge>
         </div>
     @endif
 
     <div class="grid gap-6 lg:grid-cols-2">
         <flux:card>
-            <flux:heading>{{ __('Company Information') }}</flux:heading>
+            <flux:heading>{{ __('Contact Information') }}</flux:heading>
 
             <div class="mt-4 grid gap-3 text-sm">
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Legal name') }}</flux:text>
-                    <flux:text>{{ $company->legal_name ?: '—' }}</flux:text>
+                    <flux:text>{{ __('Company') }}</flux:text>
+                    <flux:text>{{ $contact->company?->name ?: '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('Job title') }}</flux:text>
+                    <flux:text>{{ $contact->job_title ?: '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('Department') }}</flux:text>
+                    <flux:text>{{ $contact->department ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Lead source') }}</flux:text>
-                    <flux:text>{{ $company->source ?: '—' }}</flux:text>
+                    <flux:text>{{ $contact->source ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Ownership type') }}</flux:text>
-                    <flux:text>{{ $company->ownership_type ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Founded year') }}</flux:text>
-                    <flux:text>{{ $company->founded_year ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Employees') }}</flux:text>
-                    <flux:text>{{ $company->employee_count ? number_format($company->employee_count) : '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Annual revenue') }}</flux:text>
-                    <flux:text>{{ $company->annual_revenue ? '$' . number_format((float) $company->annual_revenue, 2) : '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Tax ID') }}</flux:text>
-                    <flux:text>{{ $company->tax_id ?: '—' }}</flux:text>
+                    <flux:text>{{ __('Birthday') }}</flux:text>
+                    <flux:text>{{ $contact->birthday?->format('M d, Y') ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Last contacted') }}</flux:text>
-                    <flux:text>{{ $company->last_contacted_at?->format('M d, Y') ?: '—' }}</flux:text>
+                    <flux:text>{{ $contact->last_contacted_at?->format('M d, Y') ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Next follow-up') }}</flux:text>
-                    <flux:text>{{ $company->next_follow_up_at?->format('M d, Y') ?: '—' }}</flux:text>
+                    <flux:text>{{ $contact->next_follow_up_at?->format('M d, Y') ?: '—' }}</flux:text>
                 </div>
             </div>
         </flux:card>
 
         <flux:card>
-            <flux:heading>{{ __('Contact Information') }}</flux:heading>
+            <flux:heading>{{ __('Communication Information') }}</flux:heading>
 
             <div class="mt-4 grid gap-3 text-sm">
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Company email') }}</flux:text>
-                    <flux:text>{{ $company->email ?: '—' }}</flux:text>
+                    <flux:text>{{ __('Primary email') }}</flux:text>
+                    <flux:text>{{ $contact->email ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Billing email') }}</flux:text>
-                    <flux:text>{{ $company->billing_email ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Company phone') }}</flux:text>
-                    <flux:text>{{ $company->phone ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Support phone') }}</flux:text>
-                    <flux:text>{{ $company->support_phone ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Preferred contact') }}</flux:text>
-                    <flux:text>{{ $company->preferred_contact_method ? \Illuminate\Support\Str::headline($company->preferred_contact_method) : '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Timezone') }}</flux:text>
-                    <flux:text>{{ $company->timezone ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Website') }}</flux:text>
-                    <flux:text>{{ $company->website ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('LinkedIn') }}</flux:text>
-                    <flux:text>{{ $company->linkedin_url ?: '—' }}</flux:text>
-                </div>
-
-                <div class="pt-2 border-t border-zinc-200 dark:border-zinc-700">
-                    <flux:heading size="lg">{{ __('Primary Contact') }}</flux:heading>
-                </div>
-
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Name') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_name ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Email') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_email ?: '—' }}</flux:text>
+                    <flux:text>{{ __('Alternate email') }}</flux:text>
+                    <flux:text>{{ $contact->alternate_email ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Phone') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_phone ?: '—' }}</flux:text>
+                    <flux:text>{{ $contact->phone ?: '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('Mobile phone') }}</flux:text>
+                    <flux:text>{{ $contact->mobile_phone ?: '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('Preferred contact') }}</flux:text>
+                    <flux:text>{{ $contact->preferred_contact_method ? \Illuminate\Support\Str::headline($contact->preferred_contact_method) : '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('Timezone') }}</flux:text>
+                    <flux:text>{{ $contact->timezone ?: '—' }}</flux:text>
+                </div>
+                <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
+                    <flux:text>{{ __('LinkedIn') }}</flux:text>
+                    <flux:text>{{ $contact->linkedin_url ?: '—' }}</flux:text>
                 </div>
             </div>
         </flux:card>
@@ -237,14 +209,14 @@ new #[Title("Company Details")] class extends Component {
         <flux:heading>{{ __('Address') }}</flux:heading>
 
         <div class="mt-4 grid gap-2 text-sm">
-            <flux:text>{{ $company->address_line_1 ?: '—' }}</flux:text>
-            @if ($company->address_line_2)
-                <flux:text>{{ $company->address_line_2 }}</flux:text>
+            <flux:text>{{ $contact->address_line_1 ?: '—' }}</flux:text>
+            @if ($contact->address_line_2)
+                <flux:text>{{ $contact->address_line_2 }}</flux:text>
             @endif
             <flux:text>
-                {{ collect([$company->city, $company->state, $company->postal_code])->filter()->implode(', ') ?: '—' }}
+                {{ collect([$contact->city, $contact->state, $contact->postal_code])->filter()->implode(', ') ?: '—' }}
             </flux:text>
-            <flux:text>{{ $company->country ?: '—' }}</flux:text>
+            <flux:text>{{ $contact->country ?: '—' }}</flux:text>
         </div>
     </flux:card>
 
@@ -253,7 +225,7 @@ new #[Title("Company Details")] class extends Component {
             <flux:heading>{{ __('Activity Timeline') }}</flux:heading>
             <flux:button
                 variant="ghost"
-                :href="route('activities.create', ['company_id' => $company->id])"
+                :href="route('activities.create', array_filter(['company_id' => $contact->company_id, 'contact_id' => $contact->id]))"
                 wire:navigate
             >
                 {{ __('Log activity') }}
@@ -277,19 +249,19 @@ new #[Title("Company Details")] class extends Component {
                     <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                         {{ __('Date: :date', ['date' => $timelineItem->activity_at?->format('M d, Y') ?: '—']) }}
                         ·
-                        {{ __('Contact: :contact', ['contact' => $timelineItem->contact?->name ?: '—']) }}
+                        {{ __('Company: :company', ['company' => $timelineItem->company?->name ?: '—']) }}
                         ·
                         {{ __('Next follow-up: :date', ['date' => $timelineItem->next_follow_up_at?->format('M d, Y') ?: '—']) }}
                     </div>
                 </div>
             @empty
-                <flux:text>{{ __('No activities logged for this company yet.') }}</flux:text>
+                <flux:text>{{ __('No activities logged for this contact yet.') }}</flux:text>
             @endforelse
         </div>
     </flux:card>
 
     <flux:card>
         <flux:heading>{{ __('Notes') }}</flux:heading>
-        <flux:text class="mt-4 whitespace-pre-line">{{ $company->notes ?: __('No notes yet.') }}</flux:text>
+        <flux:text class="mt-4 whitespace-pre-line">{{ $contact->notes ?: __('No notes yet.') }}</flux:text>
     </flux:card>
 </div>

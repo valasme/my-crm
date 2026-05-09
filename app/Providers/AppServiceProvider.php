@@ -2,8 +2,12 @@
 
 namespace App\Providers;
 
+use App\Models\Activity;
 use App\Models\Company;
+use App\Models\Contact;
+use App\Policies\ActivityPolicy;
 use App\Policies\CompanyPolicy;
+use App\Policies\ContactPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -30,6 +34,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Company::class, CompanyPolicy::class);
+        Gate::policy(Contact::class, ContactPolicy::class);
+        Gate::policy(Activity::class, ActivityPolicy::class);
 
         $this->configureDefaults();
         $this->configureRateLimiting();
@@ -45,7 +51,7 @@ class AppServiceProvider extends ServiceProvider
         DB::prohibitDestructiveCommands(app()->isProduction());
 
         Password::defaults(
-            fn(): ?Password => app()->isProduction()
+            fn (): ?Password => app()->isProduction()
                 ? Password::min(12)
                     ->mixedCase()
                     ->letters()
@@ -61,13 +67,39 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureRateLimiting(): void
     {
-        RateLimiter::for("companies-read", function (Request $request): Limit {
+        RateLimiter::for('companies-read', function (Request $request): Limit {
             return Limit::perMinute(180)->by(
                 $request->user()?->id ?: $request->ip(),
             );
         });
 
-        RateLimiter::for("companies-write", function (Request $request): Limit {
+        RateLimiter::for('companies-write', function (Request $request): Limit {
+            return Limit::perMinute(60)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('contacts-read', function (Request $request): Limit {
+            return Limit::perMinute(180)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('contacts-write', function (Request $request): Limit {
+            return Limit::perMinute(60)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('activities-read', function (Request $request): Limit {
+            return Limit::perMinute(180)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('activities-write', function (
+            Request $request,
+        ): Limit {
             return Limit::perMinute(60)->by(
                 $request->user()?->id ?: $request->ip(),
             );

@@ -13,13 +13,13 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 
-#[Fillable(["name", "email", "password"])]
+#[Fillable(['name', 'email', 'password'])]
 #[
     Hidden([
-        "password",
-        "two_factor_secret",
-        "two_factor_recovery_codes",
-        "remember_token",
+        'password',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
+        'remember_token',
     ]),
 ]
 class User extends Authenticatable
@@ -35,8 +35,8 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            "email_verified_at" => "datetime",
-            "password" => "hashed",
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
         ];
     }
 
@@ -49,14 +49,30 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the contacts owned by the user.
+     */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Contact::class);
+    }
+
+    /**
+     * Get the activities owned by the user.
+     */
+    public function activities(): HasMany
+    {
+        return $this->hasMany(Activity::class);
+    }
+
+    /**
      * Get the user's initials
      */
     public function initials(): string
     {
         return Str::of($this->name)
-            ->explode(" ")
+            ->explode(' ')
             ->take(2)
-            ->map(fn($word) => Str::substr($word, 0, 1))
-            ->implode("");
+            ->map(fn ($word) => Str::substr($word, 0, 1))
+            ->implode('');
     }
 }
