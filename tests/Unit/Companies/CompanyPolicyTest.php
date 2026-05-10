@@ -9,12 +9,12 @@ use Tests\TestCase;
 uses(TestCase::class, RefreshDatabase::class);
 
 test(
-    "company policy grants listing and create permissions only to persisted users",
+    'company policy grants listing and create permissions only to persisted users',
     function () {
         $persistedUser = User::factory()->create();
         $transientUser = User::factory()->make();
 
-        $policy = new CompanyPolicy();
+        $policy = new CompanyPolicy;
 
         expect($persistedUser->exists)
             ->toBeTrue()
@@ -31,31 +31,30 @@ test(
     },
 );
 
-test("company policy authorizes ownership-based actions", function () {
+test('company policy authorizes ownership-based actions', function () {
     $owner = User::factory()->create();
     $otherUser = User::factory()->create();
 
     $company = Company::factory()->for($owner)->create();
 
-    $policy = new CompanyPolicy();
+    $policy = new CompanyPolicy;
 
     foreach (
-        ["view", "update", "delete", "restore", "forceDelete"]
-        as $ability
+        ['view', 'update', 'delete', 'restore', 'forceDelete'] as $ability
     ) {
         expect($policy->{$ability}($owner, $company))->toBeTrue();
         expect($policy->{$ability}($otherUser, $company))->toBeFalse();
     }
 });
 
-test("company policy evaluates ownership per company record", function () {
+test('company policy evaluates ownership per company record', function () {
     $firstUser = User::factory()->create();
     $secondUser = User::factory()->create();
 
     $firstUsersCompany = Company::factory()->for($firstUser)->create();
     $secondUsersCompany = Company::factory()->for($secondUser)->create();
 
-    $policy = new CompanyPolicy();
+    $policy = new CompanyPolicy;
 
     expect($policy->view($firstUser, $firstUsersCompany))
         ->toBeTrue()

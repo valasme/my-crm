@@ -65,6 +65,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the tasks owned by the user.
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
+
+    /**
      * Get the user's initials
      */
     public function initials(): string

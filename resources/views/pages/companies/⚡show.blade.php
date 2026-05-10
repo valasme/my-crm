@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Task;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -44,6 +45,31 @@ new #[Title("Company Details")] class extends Component {
                 "next_follow_up_at",
             ])
             ->orderByDesc("activity_at")
+            ->orderByDesc("id")
+            ->limit(12)
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, Task>
+     */
+    #[Computed]
+    public function recentTasks(): Collection
+    {
+        return $this->company
+            ->tasks()
+            ->with(["contact:id,name,user_id", "activity:id,name,user_id"])
+            ->select([
+                "id",
+                "contact_id",
+                "activity_id",
+                "name",
+                "type",
+                "status",
+                "task_at",
+                "next_follow_up_at",
+            ])
+            ->orderByDesc("task_at")
             ->orderByDesc("id")
             ->limit(12)
             ->get();
@@ -284,6 +310,48 @@ new #[Title("Company Details")] class extends Component {
                 </div>
             @empty
                 <flux:text>{{ __('No activities logged for this company yet.') }}</flux:text>
+            @endforelse
+        </div>
+    </flux:card>
+
+    <flux:card>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading>{{ __('Task Pipeline') }}</flux:heading>
+            <flux:button
+                variant="ghost"
+                :href="route('tasks.create', ['company_id' => $company->id])"
+                wire:navigate
+            >
+                {{ __('Create task') }}
+            </flux:button>
+        </div>
+
+        <div class="mt-4 space-y-3">
+            @forelse ($this->recentTasks as $timelineItem)
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <flux:link :href="route('tasks.show', $timelineItem)" wire:navigate>
+                            {{ $timelineItem->name }}
+                        </flux:link>
+
+                        <div class="flex items-center gap-2">
+                            <flux:badge>{{ \Illuminate\Support\Str::headline($timelineItem->type) }}</flux:badge>
+                            <flux:badge>{{ \Illuminate\Support\Str::headline($timelineItem->status) }}</flux:badge>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {{ __('Date: :date', ['date' => $timelineItem->task_at?->format('M d, Y') ?: '—']) }}
+                        ·
+                        {{ __('Contact: :contact', ['contact' => $timelineItem->contact?->name ?: '—']) }}
+                        ·
+                        {{ __('Activity: :activity', ['activity' => $timelineItem->activity?->name ?: '—']) }}
+                        ·
+                        {{ __('Next follow-up: :date', ['date' => $timelineItem->next_follow_up_at?->format('M d, Y') ?: '—']) }}
+                    </div>
+                </div>
+            @empty
+                <flux:text>{{ __('No tasks created for this company yet.') }}</flux:text>
             @endforelse
         </div>
     </flux:card>

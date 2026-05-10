@@ -2,21 +2,21 @@
 
 namespace App\Http\Requests;
 
-use App\Concerns\CompanyValidationRules;
-use App\Models\Company;
+use App\Concerns\TaskValidationRules;
+use App\Models\Task;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreCompanyRequest extends FormRequest
+class StoreTaskRequest extends FormRequest
 {
-    use CompanyValidationRules;
+    use TaskValidationRules;
 
     /**
      * Prepare incoming data before validation.
      */
     protected function prepareForValidation(): void
     {
-        $this->merge($this->sanitizeCompanyInput($this->all()));
+        $this->merge($this->sanitizeTaskInput($this->all()));
     }
 
     /**
@@ -24,7 +24,7 @@ class StoreCompanyRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->can('create', Company::class) ?? false;
+        return $this->user()?->can('create', Task::class) ?? false;
     }
 
     /**
@@ -38,6 +38,6 @@ class StoreCompanyRequest extends FormRequest
             return [];
         }
 
-        return $this->companyRules($this->user()->id);
+        return $this->taskRules($this->user()->id);
     }
 }

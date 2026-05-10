@@ -2,16 +2,15 @@
 
 namespace App\Models;
 
-use Database\Factories\ActivityFactory;
+use Database\Factories\TaskFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Activity extends Model
+class Task extends Model
 {
-    /** @use HasFactory<ActivityFactory> */
+    /** @use HasFactory<TaskFactory> */
     use HasFactory;
 
     /**
@@ -30,11 +29,15 @@ class Activity extends Model
     protected $fillable = [
         'company_id',
         'contact_id',
+        'activity_id',
         'name',
         'type',
         'status',
         'source',
-        'activity_at',
+        'task_at',
+        'next_follow_up_at',
+        'is_active',
+        'outcome',
         'notes',
     ];
 
@@ -46,7 +49,9 @@ class Activity extends Model
     protected function casts(): array
     {
         return [
-            'activity_at' => 'date',
+            'task_at' => 'date',
+            'next_follow_up_at' => 'date',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -67,10 +72,10 @@ class Activity extends Model
     }
 
     /**
-     * Scope a query to activities owned by a given user.
+     * Scope a query to tasks owned by a given user.
      *
-     * @param  Builder<Activity>  $query
-     * @return Builder<Activity>
+     * @param  Builder<Task>  $query
+     * @return Builder<Task>
      */
     public function scopeOwnedBy(Builder $query, User $user): Builder
     {
@@ -78,9 +83,9 @@ class Activity extends Model
     }
 
     /**
-     * Get the user that owns the activity.
+     * Get the user that owns the task.
      *
-     * @return BelongsTo<User, Activity>
+     * @return BelongsTo<User, Task>
      */
     public function user(): BelongsTo
     {
@@ -88,9 +93,9 @@ class Activity extends Model
     }
 
     /**
-     * Get the company associated with the activity.
+     * Get the company associated with the task.
      *
-     * @return BelongsTo<Company, Activity>
+     * @return BelongsTo<Company, Task>
      */
     public function company(): BelongsTo
     {
@@ -98,9 +103,9 @@ class Activity extends Model
     }
 
     /**
-     * Get the contact associated with the activity.
+     * Get the contact associated with the task.
      *
-     * @return BelongsTo<Contact, Activity>
+     * @return BelongsTo<Contact, Task>
      */
     public function contact(): BelongsTo
     {
@@ -108,12 +113,12 @@ class Activity extends Model
     }
 
     /**
-     * Get tasks associated with the activity.
+     * Get the related activity for this task.
      *
-     * @return HasMany<Task>
+     * @return BelongsTo<Activity, Task>
      */
-    public function tasks(): HasMany
+    public function activity(): BelongsTo
     {
-        return $this->hasMany(Task::class);
+        return $this->belongsTo(Activity::class);
     }
 }

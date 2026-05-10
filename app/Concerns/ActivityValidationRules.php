@@ -40,13 +40,6 @@ trait ActivityValidationRules
             'status' => ['required', 'string', Rule::in(Activity::statuses())],
             'source' => ['nullable', 'string', 'max:120'],
             'activity_at' => ['required', 'date'],
-            'next_follow_up_at' => [
-                'nullable',
-                'date',
-                'after_or_equal:activity_at',
-            ],
-            'is_active' => ['required', 'boolean'],
-            'outcome' => ['nullable', 'string', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
     }
@@ -77,7 +70,7 @@ trait ActivityValidationRules
      */
     protected function sanitizeActivityInput(array $input): array
     {
-        $stringFields = ['name', 'type', 'status', 'source', 'outcome'];
+        $stringFields = ['name', 'type', 'status', 'source'];
 
         foreach ($stringFields as $field) {
             if (! array_key_exists($field, $input)) {
@@ -115,25 +108,11 @@ trait ActivityValidationRules
             }
         }
 
-        foreach (['activity_at', 'next_follow_up_at'] as $dateField) {
-            if (
-                array_key_exists($dateField, $input) &&
-                $input[$dateField] === ''
-            ) {
-                $input[$dateField] = null;
-            }
-        }
-
-        if (array_key_exists('is_active', $input)) {
-            $bool = filter_var(
-                $input['is_active'],
-                FILTER_VALIDATE_BOOLEAN,
-                FILTER_NULL_ON_FAILURE,
-            );
-
-            if ($bool !== null) {
-                $input['is_active'] = $bool;
-            }
+        if (
+            array_key_exists('activity_at', $input) &&
+            $input['activity_at'] === ''
+        ) {
+            $input['activity_at'] = null;
         }
 
         return $input;

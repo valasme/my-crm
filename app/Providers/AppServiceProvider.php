@@ -5,9 +5,11 @@ namespace App\Providers;
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\Task;
 use App\Policies\ActivityPolicy;
 use App\Policies\CompanyPolicy;
 use App\Policies\ContactPolicy;
+use App\Policies\TaskPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -36,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Company::class, CompanyPolicy::class);
         Gate::policy(Contact::class, ContactPolicy::class);
         Gate::policy(Activity::class, ActivityPolicy::class);
+        Gate::policy(Task::class, TaskPolicy::class);
 
         $this->configureDefaults();
         $this->configureRateLimiting();
@@ -100,6 +103,18 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('activities-write', function (
             Request $request,
         ): Limit {
+            return Limit::perMinute(60)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('tasks-read', function (Request $request): Limit {
+            return Limit::perMinute(180)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('tasks-write', function (Request $request): Limit {
             return Limit::perMinute(60)->by(
                 $request->user()?->id ?: $request->ip(),
             );

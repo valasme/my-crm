@@ -23,15 +23,11 @@ test(
                 'contact_id' => $contact->id,
                 'status' => 'planned',
                 'type' => 'call',
-                'is_active' => true,
-                'next_follow_up_at' => now()->addDay(),
             ]);
 
         $defaultFilters = [
             'status' => 'all',
             'type' => 'all',
-            'active' => 'all',
-            'follow_up' => 'all',
             'company' => 'all',
             'contact' => 'all',
             'sort' => 'updated_at',
@@ -96,15 +92,11 @@ test(
                 'contact_id' => $contact->id,
                 'status' => 'completed',
                 'type' => 'email',
-                'is_active' => false,
-                'next_follow_up_at' => null,
             ]);
 
         $filters = [
             'status' => 'completed',
             'type' => 'email',
-            'active' => 'inactive',
-            'follow_up' => 'none',
             'company' => (string) $company->id,
             'contact' => (string) $contact->id,
             'sort' => 'name',

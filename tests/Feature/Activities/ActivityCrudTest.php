@@ -15,10 +15,7 @@ function activityPayload(array $overrides = []): array
             'status' => 'planned',
             'source' => 'Inbound',
             'activity_at' => '2026-01-10',
-            'next_follow_up_at' => '2026-01-20',
-            'is_active' => '1',
-            'outcome' => 'Discussed scope and agreed next steps.',
-            'notes' => 'Follow-up activity for Q1 plan.',
+            'notes' => 'Customer interaction notes for Q1 plan.',
         ],
         $overrides,
     );
@@ -125,10 +122,8 @@ test(
         $response
             ->assertSee('Status: All')
             ->assertSee('Type: All')
-            ->assertSee('State: All')
             ->assertSee('Company: All companies')
             ->assertSee('Contact: All contacts')
-            ->assertSee('Follow-up: All')
             ->assertSee('Sort: Recently updated')
             ->assertSee('Order: Descending')
             ->assertSee('Rows: 15')
@@ -158,10 +153,8 @@ test(
                 'search' => '  <script>alert(1)</script>   Alpha   Beta  ',
                 'status' => 'drop-table',
                 'type' => 'drop-table',
-                'active' => 'sometimes',
                 'company' => 'drop-table',
                 'contact' => 'drop-table',
-                'follow_up' => 'later',
                 'sort' => 'not-allowed',
                 'direction' => 'sideways',
                 'per_page' => 999,
@@ -173,10 +166,8 @@ test(
             ->assertSee('value="alert(1) Alpha Beta"', false)
             ->assertSee('Status: All')
             ->assertSee('Type: All')
-            ->assertSee('State: All')
             ->assertSee('Company: All companies')
             ->assertSee('Contact: All contacts')
-            ->assertSee('Follow-up: All')
             ->assertSee('Sort: Recently updated')
             ->assertSee('Order: Descending')
             ->assertSee('Rows: 15');
@@ -250,7 +241,7 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'source' => 'Inbound',
-                'outcome' => 'Japan confirmed',
+                'notes' => 'Japan confirmed',
                 'company_id' => $usersCompany->id,
                 'contact_id' => $usersContact->id,
             ]);
@@ -262,7 +253,7 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'source' => 'Inbound',
-                'outcome' => 'Brazil pending',
+                'notes' => 'Brazil pending',
                 'company_id' => $usersCompany->id,
                 'contact_id' => $usersContact->id,
             ]);
@@ -274,7 +265,7 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'source' => 'Inbound',
-                'outcome' => 'Japan confirmed',
+                'notes' => 'Japan confirmed',
                 'company_id' => $otherCompany->id,
                 'contact_id' => $otherContact->id,
             ]);
@@ -348,218 +339,108 @@ test(
     },
 );
 
-test(
-    'index filters by status, type, state, company, contact, and follow-up date',
-    function () {
-        $user = User::factory()->create();
+test('index filters by status, type, company, and contact', function () {
+    $user = User::factory()->create();
 
-        $matchingCompany = Company::factory()
-            ->for($user)
-            ->create(['name' => 'Match Company']);
+    $matchingCompany = Company::factory()
+        ->for($user)
+        ->create(['name' => 'Match Company']);
 
-        $matchingContact = Contact::factory()
-            ->for($user)
-            ->create([
-                'company_id' => $matchingCompany->id,
-                'name' => 'Match Contact',
-            ]);
+    $matchingContact = Contact::factory()
+        ->for($user)
+        ->create([
+            'company_id' => $matchingCompany->id,
+            'name' => 'Match Contact',
+        ]);
 
-        $otherCompany = Company::factory()
-            ->for($user)
-            ->create(['name' => 'Other Company']);
+    $otherCompany = Company::factory()
+        ->for($user)
+        ->create(['name' => 'Other Company']);
 
-        $otherContact = Contact::factory()
-            ->for($user)
-            ->create([
-                'company_id' => $otherCompany->id,
-                'name' => 'Other Contact',
-            ]);
+    $otherContact = Contact::factory()
+        ->for($user)
+        ->create([
+            'company_id' => $otherCompany->id,
+            'name' => 'Other Contact',
+        ]);
 
-        $matching = Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Match Activity',
-                'status' => 'completed',
-                'type' => 'email',
-                'is_active' => false,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $matchingContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    $matching = Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Match Activity',
+            'status' => 'completed',
+            'type' => 'email',
+            'company_id' => $matchingCompany->id,
+            'contact_id' => $matchingContact->id,
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Wrong Status',
-                'status' => 'planned',
-                'type' => 'email',
-                'is_active' => false,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $matchingContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Wrong Status',
+            'status' => 'planned',
+            'type' => 'email',
+            'company_id' => $matchingCompany->id,
+            'contact_id' => $matchingContact->id,
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Wrong Type',
-                'status' => 'completed',
-                'type' => 'call',
-                'is_active' => false,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $matchingContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Wrong Type',
+            'status' => 'completed',
+            'type' => 'call',
+            'company_id' => $matchingCompany->id,
+            'contact_id' => $matchingContact->id,
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Wrong State',
-                'status' => 'completed',
-                'type' => 'email',
-                'is_active' => true,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $matchingContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Wrong Company',
+            'status' => 'completed',
+            'type' => 'email',
+            'company_id' => $otherCompany->id,
+            'contact_id' => $otherContact->id,
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Wrong Company',
-                'status' => 'completed',
-                'type' => 'email',
-                'is_active' => false,
-                'company_id' => $otherCompany->id,
-                'contact_id' => $otherContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Wrong Contact',
+            'status' => 'completed',
+            'type' => 'email',
+            'company_id' => $matchingCompany->id,
+            'contact_id' => $otherContact->id,
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Wrong Contact',
-                'status' => 'completed',
-                'type' => 'email',
-                'is_active' => false,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $otherContact->id,
-                'next_follow_up_at' => null,
-            ]);
+    $response = $this->actingAs($user)->get(
+        route('activities.index', [
+            'status' => 'completed',
+            'type' => 'email',
+            'company' => (string) $matchingCompany->id,
+            'contact' => (string) $matchingContact->id,
+        ]),
+    );
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Has Follow Up',
-                'status' => 'completed',
-                'type' => 'email',
-                'is_active' => false,
-                'company_id' => $matchingCompany->id,
-                'contact_id' => $matchingContact->id,
-                'next_follow_up_at' => now()->addDay(),
-            ]);
+    $response
+        ->assertOk()
+        ->assertSee('Match Activity')
+        ->assertDontSee('Wrong Status')
+        ->assertDontSee('Wrong Type')
+        ->assertDontSee('Wrong Company')
+        ->assertDontSee('Wrong Contact');
 
-        $response = $this->actingAs($user)->get(
-            route('activities.index', [
-                'status' => 'completed',
-                'type' => 'email',
-                'active' => 'inactive',
-                'company' => (string) $matchingCompany->id,
-                'contact' => (string) $matchingContact->id,
-                'follow_up' => 'none',
-            ]),
-        );
+    $response
+        ->assertSee('Status: Completed')
+        ->assertSee('Type: Email')
+        ->assertSee('Company: Match Company')
+        ->assertSee('Contact: Match Contact');
 
-        $response
-            ->assertOk()
-            ->assertSee('Match Activity')
-            ->assertDontSee('Wrong Status')
-            ->assertDontSee('Wrong Type')
-            ->assertDontSee('Wrong State')
-            ->assertDontSee('Wrong Company')
-            ->assertDontSee('Wrong Contact')
-            ->assertDontSee('Has Follow Up');
-
-        $response
-            ->assertSee('Status: Completed')
-            ->assertSee('Type: Email')
-            ->assertSee('State: Inactive')
-            ->assertSee('Company: Match Company')
-            ->assertSee('Contact: Match Contact')
-            ->assertSee('Follow-up: No date');
-
-        expect($matching->fresh())
-            ->not->toBeNull()
-            ->and($matching->fresh()->name)
-            ->toBe('Match Activity');
-    },
-);
-
-test('index follow-up filter supports due and upcoming buckets', function () {
-    Carbon::setTestNow(Carbon::parse('2026-02-10 09:00:00'));
-
-    try {
-        $user = User::factory()->create();
-
-        $duePast = Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'FollowDuePastActivity',
-                'next_follow_up_at' => '2026-02-09',
-            ]);
-
-        $dueToday = Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'FollowDueTodayActivity',
-                'next_follow_up_at' => '2026-02-10',
-            ]);
-
-        $upcoming = Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'FollowLaterActivity',
-                'next_follow_up_at' => '2026-02-12',
-            ]);
-
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'FollowWithoutDateActivity',
-                'next_follow_up_at' => null,
-            ]);
-
-        $dueResponse = $this->actingAs($user)->get(
-            route('activities.index', ['follow_up' => 'due']),
-        );
-
-        $upcomingResponse = $this->actingAs($user)->get(
-            route('activities.index', ['follow_up' => 'upcoming']),
-        );
-
-        $dueResponse
-            ->assertOk()
-            ->assertSee('FollowDuePastActivity')
-            ->assertSee('FollowDueTodayActivity')
-            ->assertDontSee('FollowLaterActivity')
-            ->assertDontSee('FollowWithoutDateActivity');
-
-        $upcomingResponse
-            ->assertOk()
-            ->assertSee('FollowLaterActivity')
-            ->assertDontSee('FollowDuePastActivity')
-            ->assertDontSee('FollowDueTodayActivity')
-            ->assertDontSee('FollowWithoutDateActivity');
-
-        expect($duePast->fresh())
-            ->not->toBeNull()
-            ->and($dueToday->fresh())
-            ->not->toBeNull()
-            ->and($upcoming->fresh())
-            ->not->toBeNull();
-    } finally {
-        Carbon::setTestNow();
-    }
+    expect($matching->fresh())
+        ->not->toBeNull()
+        ->and($matching->fresh()->name)
+        ->toBe('Match Activity');
 });
 
 test(
@@ -613,69 +494,50 @@ test(
     },
 );
 
-test(
-    'index sorting by next follow-up keeps nulls last for both directions',
-    function () {
-        $user = User::factory()->create();
+test('index sorting by activity date works in both directions', function () {
+    $user = User::factory()->create();
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Soon',
-                'next_follow_up_at' => '2026-02-11',
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Soon',
+            'activity_at' => '2026-02-11',
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'Later',
-                'next_follow_up_at' => '2026-02-18',
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'Later',
+            'activity_at' => '2026-02-18',
+        ]);
 
-        Activity::factory()
-            ->for($user)
-            ->create([
-                'name' => 'No Date',
-                'next_follow_up_at' => null,
-            ]);
+    Activity::factory()
+        ->for($user)
+        ->create([
+            'name' => 'No Date',
+            'activity_at' => '2026-02-01',
+        ]);
 
-        $ascResponse = $this->actingAs($user)->get(
-            route('activities.index', [
-                'sort' => 'next_follow_up_at',
-                'direction' => 'asc',
-            ]),
-        );
+    $ascResponse = $this->actingAs($user)->get(
+        route('activities.index', [
+            'sort' => 'activity_at',
+            'direction' => 'asc',
+        ]),
+    );
 
-        $descResponse = $this->actingAs($user)->get(
-            route('activities.index', [
-                'sort' => 'next_follow_up_at',
-                'direction' => 'desc',
-            ]),
-        );
+    $descResponse = $this->actingAs($user)->get(
+        route('activities.index', [
+            'sort' => 'activity_at',
+            'direction' => 'desc',
+        ]),
+    );
 
-        assertActivityAppearsBefore(
-            $ascResponse->getContent(),
-            'Soon',
-            'Later',
-        );
-        assertActivityAppearsBefore(
-            $ascResponse->getContent(),
-            'Later',
-            'No Date',
-        );
+    assertActivityAppearsBefore($ascResponse->getContent(), 'No Date', 'Soon');
+    assertActivityAppearsBefore($ascResponse->getContent(), 'Soon', 'Later');
 
-        assertActivityAppearsBefore(
-            $descResponse->getContent(),
-            'Later',
-            'Soon',
-        );
-        assertActivityAppearsBefore(
-            $descResponse->getContent(),
-            'Soon',
-            'No Date',
-        );
-    },
-);
+    assertActivityAppearsBefore($descResponse->getContent(), 'Later', 'Soon');
+    assertActivityAppearsBefore($descResponse->getContent(), 'Soon', 'No Date');
+});
 
 test('store sanitizes and normalizes incoming payload', function () {
     $user = User::factory()->create();
@@ -694,9 +556,7 @@ test('store sanitizes and normalizes incoming payload', function () {
             'type' => 'EMAIL',
             'status' => 'COMPLETED',
             'source' => '  <i>Inbound</i>  ',
-            'outcome' => '  <script>alert(1)</script> Deal closed  ',
             'notes' => "<script>bad()</script>  Important activity\r\nSecond line  ",
-            'is_active' => '0',
         ]),
     );
 
@@ -721,16 +581,12 @@ test('store sanitizes and normalizes incoming payload', function () {
         ->toBe('completed')
         ->and($activity->source)
         ->toBe('Inbound')
-        ->and($activity->outcome)
-        ->toBe('alert(1) Deal closed')
         ->and($activity->notes)
         ->toContain('Important activity')
         ->and($activity->notes)
         ->toContain('Second line')
         ->and($activity->notes)
-        ->not->toContain('<script>')
-        ->and($activity->is_active)
-        ->toBeFalse();
+        ->not->toContain('<script>');
 });
 
 test(
@@ -793,7 +649,7 @@ test(
             ->assertOk()
             ->assertSee('Create Activity')
             ->assertSee('Interaction Context')
-            ->assertSee('Timeline &amp; Follow-up', false)
+            ->assertSee('Timeline &amp; Notes', false)
             ->assertSee('Company (optional)')
             ->assertSee('Contact (optional)')
             ->assertSee('Acme Company')
@@ -824,7 +680,6 @@ test(
             'name' => 'Intro Call',
             'type' => 'call',
             'status' => 'planned',
-            'is_active' => '1',
         ]);
 
         $response = $this->actingAs($user)->post(
@@ -849,8 +704,6 @@ test(
             ->toBe('Intro Call')
             ->and($activity->status)
             ->toBe('planned')
-            ->and($activity->is_active)
-            ->toBeTrue()
             ->and(Activity::query()->count())
             ->toBe(1);
     },
@@ -896,7 +749,6 @@ test(
                 'activity_at' => '',
                 'company_id' => $otherUsersCompany->id,
                 'contact_id' => $otherUsersContact->id,
-                'is_active' => 'maybe',
             ]),
         );
 
@@ -907,7 +759,6 @@ test(
             'activity_at',
             'company_id',
             'contact_id',
-            'is_active',
         ]);
 
         expect(Activity::query()->count())->toBe(0);
@@ -979,7 +830,6 @@ test('owners can view and edit their activity records', function () {
             'contact_id' => $contact->id,
             'type' => 'meeting',
             'status' => 'completed',
-            'is_active' => false,
         ]);
 
     $showResponse = $this->actingAs($user)->get(
@@ -991,7 +841,6 @@ test('owners can view and edit their activity records', function () {
         ->assertSee('Owner Activity')
         ->assertSee('Owner Company')
         ->assertSee('Owner Contact')
-        ->assertSee('Inactive')
         ->assertSee('Completed')
         ->assertSee('Activity Details')
         ->assertSee('Record Context');
@@ -1049,8 +898,6 @@ test('owners can update their activities with sanitized values', function () {
             'type' => 'call',
             'status' => 'planned',
             'source' => 'Outbound',
-            'is_active' => true,
-            'outcome' => 'Pending follow-up',
             'notes' => 'Original note',
         ]);
 
@@ -1061,9 +908,7 @@ test('owners can update their activities with sanitized values', function () {
         'type' => 'EMAIL',
         'status' => 'COMPLETED',
         'source' => '  <i>Inbound</i>  ',
-        'outcome' => '  <script>alert(1)</script> Completed successfully  ',
         'notes' => "<script>bad()</script> Updated note\r\nLine two",
-        'is_active' => '0',
     ]);
 
     $response = $this->actingAs($user)->put(
@@ -1090,16 +935,12 @@ test('owners can update their activities with sanitized values', function () {
         ->toBe('completed')
         ->and($activity->source)
         ->toBe('Inbound')
-        ->and($activity->outcome)
-        ->toBe('alert(1) Completed successfully')
         ->and($activity->notes)
         ->toContain('Updated note')
         ->and($activity->notes)
         ->toContain('Line two')
         ->and($activity->notes)
         ->not->toContain('<script>')
-        ->and($activity->is_active)
-        ->toBeFalse()
         ->and($activity->user_id)
         ->toBe($user->id);
 });

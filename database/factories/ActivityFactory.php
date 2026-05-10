@@ -38,11 +38,6 @@ class ActivityFactory extends Factory
                     'Support',
                 ]),
             'activity_at' => fake()->dateTimeBetween('-120 days', 'now'),
-            'next_follow_up_at' => fake()
-                ->optional()
-                ->dateTimeBetween('now', '+60 days'),
-            'is_active' => fake()->boolean(85),
-            'outcome' => fake()->optional()->sentence(10),
             'notes' => fake()->optional()->realText(200),
         ];
     }

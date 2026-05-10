@@ -106,32 +106,25 @@ test('ownedBy scope can be chained with additional constraints', function () {
     expect($resultIds)->toContain($target->id)->and($resultIds)->toHaveCount(1);
 });
 
-test('activity casts date and boolean fields correctly', function () {
+test('activity casts date fields correctly', function () {
     $user = User::factory()->create();
 
     $activity = Activity::factory()
         ->for($user)
         ->create([
             'activity_at' => '2026-03-10',
-            'next_follow_up_at' => '2026-03-15',
-            'is_active' => 0,
         ]);
 
     $activity->refresh();
 
-    expect($activity->activity_at?->format('Y-m-d'))
-        ->toBe('2026-03-10')
-        ->and($activity->next_follow_up_at?->format('Y-m-d'))
-        ->toBe('2026-03-15')
-        ->and($activity->is_active)
-        ->toBeFalse();
+    expect($activity->activity_at?->format('Y-m-d'))->toBe('2026-03-10');
 });
 
 test('activity model exposes expected fillable attributes', function () {
     $fillable = new Activity()->getFillable();
 
     expect($fillable)
-        ->toHaveCount(11)
+        ->toHaveCount(8)
         ->and($fillable)
         ->toContain('company_id')
         ->and($fillable)
@@ -147,12 +140,6 @@ test('activity model exposes expected fillable attributes', function () {
         ->and($fillable)
         ->toContain('activity_at')
         ->and($fillable)
-        ->toContain('next_follow_up_at')
-        ->and($fillable)
-        ->toContain('is_active')
-        ->and($fillable)
-        ->toContain('outcome')
-        ->and($fillable)
         ->toContain('notes')
         ->and($fillable)
         ->not->toContain('user_id');
@@ -165,12 +152,8 @@ test('activity model exposes expected casts', function () {
         ->toBe('int')
         ->and($casts['activity_at'])
         ->toBe('date')
-        ->and($casts['next_follow_up_at'])
-        ->toBe('date')
-        ->and($casts['is_active'])
-        ->toBe('boolean')
         ->and(array_keys($casts))
-        ->toBe(['id', 'activity_at', 'next_follow_up_at', 'is_active']);
+        ->toBe(['id', 'activity_at']);
 });
 
 test('activity helper methods mirror model constants', function () {

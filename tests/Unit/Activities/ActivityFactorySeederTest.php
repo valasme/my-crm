@@ -28,11 +28,7 @@ test(
             ->and(Activity::types())
             ->toContain($activity->type)
             ->and($activity->activity_at)
-            ->not->toBeNull()
-            ->and(
-                $activity->is_active === true || $activity->is_active === false,
-            )
-            ->toBeTrue();
+            ->not->toBeNull();
     },
 );
 

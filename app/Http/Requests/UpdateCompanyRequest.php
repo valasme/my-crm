@@ -38,7 +38,7 @@ class UpdateCompanyRequest extends FormRequest
             return [];
         }
 
-        $routeCompany = $this->route("company");
+        $routeCompany = $this->route('company');
 
         $companyId =
             $routeCompany instanceof Company

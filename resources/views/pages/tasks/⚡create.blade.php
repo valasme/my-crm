@@ -3,6 +3,7 @@
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -10,17 +11,19 @@ use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
-new #[Title("Create Activity")] class extends Component {
+new #[Title("Create Task")] class extends Component {
     public ?int $prefilledCompanyId = null;
 
     public ?int $prefilledContactId = null;
+
+    public ?int $prefilledActivityId = null;
 
     /**
      * Mount the component.
      */
     public function mount(): void
     {
-        Gate::authorize("create", Activity::class);
+        Gate::authorize("create", Task::class);
 
         /** @var User $user */
         $user = Auth::user();
@@ -56,6 +59,34 @@ new #[Title("Create Activity")] class extends Component {
         ) {
             $this->prefilledContactId = (int) $contactId;
         }
+
+        $activityId = filter_var(
+            (string) request()->query("activity_id", ""),
+            FILTER_VALIDATE_INT,
+            ["options" => ["min_range" => 1]],
+        );
+
+        if ($activityId !== false) {
+            $activity = Activity::query()
+                ->select(["id", "company_id", "contact_id"])
+                ->where("user_id", $user->id)
+                ->whereKey($activityId)
+                ->first();
+
+            if ($activity !== null) {
+                $this->prefilledActivityId = (int) $activity->id;
+                $this->prefilledCompanyId =
+                    $this->prefilledCompanyId ??
+                    ($activity->company_id !== null
+                        ? (int) $activity->company_id
+                        : null);
+                $this->prefilledContactId =
+                    $this->prefilledContactId ??
+                    ($activity->contact_id !== null
+                        ? (int) $activity->contact_id
+                        : null);
+            }
+        }
     }
 
     /**
@@ -64,7 +95,7 @@ new #[Title("Create Activity")] class extends Component {
     #[Computed]
     public function statuses(): array
     {
-        return Activity::statuses();
+        return Task::statuses();
     }
 
     /**
@@ -73,7 +104,7 @@ new #[Title("Create Activity")] class extends Component {
     #[Computed]
     public function types(): array
     {
-        return Activity::types();
+        return Task::types();
     }
 
     /**
@@ -115,6 +146,27 @@ new #[Title("Create Activity")] class extends Component {
             )
             ->all();
     }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function activities(): array
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        return $user
+            ->activities()
+            ->select(["id", "name"])
+            ->orderByDesc("activity_at")
+            ->orderByDesc("id")
+            ->pluck("name", "id")
+            ->mapWithKeys(
+                fn(string $name, int $id): array => [(string) $id => $name],
+            )
+            ->all();
+    }
 };
 ?>
 
@@ -125,8 +177,11 @@ new #[Title("Create Activity")] class extends Component {
                 'search',
                 'status',
                 'type',
+                'active',
+                'follow_up',
                 'company',
                 'contact',
+                'activity',
                 'sort',
                 'direction',
                 'per_page',
@@ -139,38 +194,38 @@ new #[Title("Create Activity")] class extends Component {
     <div class="space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="space-y-1">
-                <flux:heading size="xl" as="h1" id="create-activity-heading" aria-label="{{ __('Create Activity') }}">
-                    {{ __('Create Activity') }}
+                <flux:heading size="xl" as="h1" id="create-task-heading" aria-label="{{ __('Create Task') }}">
+                    {{ __('Create Task') }}
                 </flux:heading>
-                <flux:subheading>{{ __('Log a customer interaction and preserve context.') }}</flux:subheading>
+                <flux:subheading>{{ __('Plan work and connect it to the right company, contact, and activity.') }}</flux:subheading>
             </div>
 
-            <flux:button variant="ghost" :href="route('activities.index', $indexQuery)" wire:navigate>
-                {{ __('Activities') }}
+            <flux:button variant="ghost" :href="route('tasks.index', $indexQuery)" wire:navigate>
+                {{ __('Tasks') }}
             </flux:button>
         </div>
 
         <div class="border-t border-zinc-200 pt-3 dark:border-zinc-700">
-            <flux:button type="button" variant="ghost" :href="route('activities.index', $indexQuery)" wire:navigate>
+            <flux:button type="button" variant="ghost" :href="route('tasks.index', $indexQuery)" wire:navigate>
                 <flux:icon.arrow-left variant="micro" />
                 {{ __('Back') }}
             </flux:button>
         </div>
     </div>
 
-    @if ($errors->has('activity'))
+    @if ($errors->has('task'))
         <div role="alert" aria-live="assertive" aria-atomic="true">
-            <flux:badge variant="solid">{{ $errors->first('activity') }}</flux:badge>
+            <flux:badge variant="solid">{{ $errors->first('task') }}</flux:badge>
         </div>
     @endif
 
-    <form method="POST" action="{{ route('activities.store') }}" class="space-y-6" novalidate>
+    <form method="POST" action="{{ route('tasks.store') }}" class="space-y-6" novalidate>
         @csrf
 
         <flux:card>
             <div class="mb-4 space-y-1">
-                <flux:heading>{{ __('Interaction Context') }}</flux:heading>
-                <flux:subheading>{{ __('Attach this activity to the right records so the timeline stays complete.') }}</flux:subheading>
+                <flux:heading>{{ __('Task Context') }}</flux:heading>
+                <flux:subheading>{{ __('Link this task to existing CRM records so everyone has full context.') }}</flux:subheading>
             </div>
 
             <div class="grid gap-4 md:grid-cols-2">
@@ -222,8 +277,32 @@ new #[Title("Create Activity")] class extends Component {
                     @enderror
                 </div>
 
-                <flux:input name="name" :label="__('Activity title')" :value="old('name')" required autofocus />
-                <flux:input name="source" :label="__('Channel / source (optional)')" :value="old('source')" placeholder="{{ __('Inbound, referral, event, etc.') }}" />
+                <div class="md:col-span-2">
+                    <label for="activity_id" class="mb-1 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {{ __('Related activity (optional)') }}
+                    </label>
+                    <select
+                        id="activity_id"
+                        name="activity_id"
+                        class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500 dark:focus:ring-zinc-700"
+                    >
+                        <option value="">{{ __('No related activity') }}</option>
+                        @foreach ($this->activities as $activityId => $activityName)
+                            <option
+                                value="{{ $activityId }}"
+                                @selected((string) old('activity_id', (string) $this->prefilledActivityId) === $activityId)
+                            >
+                                {{ $activityName }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('activity_id')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                </div>
+
+                <flux:input name="name" :label="__('Task title')" :value="old('name')" required autofocus />
+                <flux:input name="source" :label="__('Source (optional)')" :value="old('source')" placeholder="{{ __('Inbound, referral, internal handoff, etc.') }}" />
 
                 <div class="md:col-span-2">
                     <flux:radio.group name="type" :label="__('Type')" variant="segmented" required>
@@ -245,26 +324,45 @@ new #[Title("Create Activity")] class extends Component {
                     </flux:radio.group>
                 </div>
 
-
+                <div class="md:col-span-2">
+                    <flux:radio.group name="is_active" :label="__('Record state')" variant="segmented" required>
+                        <flux:radio value="1" :checked="(string) old('is_active', '1') === '1'">{{ __('Active') }}</flux:radio>
+                        <flux:radio value="0" :checked="(string) old('is_active') === '0'">{{ __('Inactive') }}</flux:radio>
+                    </flux:radio.group>
+                    <flux:text class="mt-2 text-xs">{{ __('Completed or canceled tasks must be inactive.') }}</flux:text>
+                </div>
             </div>
         </flux:card>
 
         <flux:card>
             <div class="mb-4 space-y-1">
-                <flux:heading>{{ __('Timeline & Notes') }}</flux:heading>
-                <flux:subheading>{{ __('Capture when the interaction happened and what was discussed.') }}</flux:subheading>
+                <flux:heading>{{ __('Scheduling & Notes') }}</flux:heading>
+                <flux:subheading>{{ __('Capture timing, expected outcome, and any details required for completion.') }}</flux:subheading>
             </div>
 
             <div class="grid gap-4 md:grid-cols-2">
                 <flux:input
-                    name="activity_at"
-                    :label="__('Activity date')"
+                    name="task_at"
+                    :label="__('Task date')"
                     type="date"
-                    :value="old('activity_at', now()->toDateString())"
+                    :value="old('task_at', now()->toDateString())"
                     required
                 />
 
+                <flux:input
+                    name="next_follow_up_at"
+                    :label="__('Next follow-up date (optional)')"
+                    type="date"
+                    :value="old('next_follow_up_at')"
+                />
 
+                <flux:input
+                    name="outcome"
+                    :label="__('Outcome (optional)')"
+                    :value="old('outcome')"
+                    placeholder="{{ __('What should be achieved?') }}"
+                    class="md:col-span-2"
+                />
 
                 <div class="md:col-span-2">
                     <flux:textarea name="notes" :label="__('Notes (optional)')" rows="6">{{ old('notes') }}</flux:textarea>
@@ -273,12 +371,12 @@ new #[Title("Create Activity")] class extends Component {
         </flux:card>
 
         <div class="flex flex-wrap items-center justify-end gap-3">
-            <flux:button variant="ghost" :href="route('activities.index', $indexQuery)" wire:navigate>
+            <flux:button variant="ghost" :href="route('tasks.index', $indexQuery)" wire:navigate>
                 {{ __('Cancel') }}
             </flux:button>
 
             <flux:button variant="primary" type="submit">
-                {{ __('Create Activity') }}
+                {{ __('Create Task') }}
             </flux:button>
         </div>
     </form>

@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreActivityRequest;
-use App\Http\Requests\UpdateActivityRequest;
+use App\Http\Requests\StoreTaskRequest;
+use App\Http\Requests\UpdateTaskRequest;
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -16,7 +17,7 @@ use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
-class ActivityController extends Controller
+class TaskController extends Controller
 {
     /**
      * @var array<int, int>
@@ -31,7 +32,8 @@ class ActivityController extends Controller
         'name',
         'type',
         'status',
-        'activity_at',
+        'task_at',
+        'next_follow_up_at',
         'created_at',
     ];
 
@@ -41,11 +43,21 @@ class ActivityController extends Controller
     private const SORT_DIRECTIONS = ['asc', 'desc'];
 
     /**
+     * @var array<int, string>
+     */
+    private const ACTIVE_FILTERS = ['all', 'active', 'inactive'];
+
+    /**
+     * @var array<int, string>
+     */
+    private const FOLLOW_UP_FILTERS = ['all', 'due', 'upcoming', 'none'];
+
+    /**
      * Display a listing of the resource.
      */
     public function index(Request $request): View
     {
-        $this->authorize('viewAny', Activity::class);
+        $this->authorize('viewAny', Task::class);
 
         /** @var User $user */
         $user = $request->user();
@@ -58,18 +70,25 @@ class ActivityController extends Controller
             ->take(6)
             ->values();
 
-        $activities = $user
-            ->activities()
-            ->with(['company:id,name,user_id', 'contact:id,name,user_id'])
+        $tasks = $user
+            ->tasks()
+            ->with([
+                'company:id,name,user_id',
+                'contact:id,name,user_id',
+                'activity:id,name,user_id',
+            ])
             ->select([
                 'id',
                 'company_id',
                 'contact_id',
+                'activity_id',
                 'name',
                 'type',
                 'status',
                 'source',
-                'activity_at',
+                'task_at',
+                'next_follow_up_at',
+                'is_active',
                 'updated_at',
             ])
             ->when($filters['status'] !== 'all', function (Builder $query) use (
@@ -82,6 +101,11 @@ class ActivityController extends Controller
             ): void {
                 $query->where('type', $filters['type']);
             })
+            ->when($filters['active'] !== 'all', function (Builder $query) use (
+                $filters,
+            ): void {
+                $query->where('is_active', $filters['active'] === 'active');
+            })
             ->when($filters['company'] !== 'all', function (
                 Builder $query,
             ) use ($filters): void {
@@ -91,6 +115,33 @@ class ActivityController extends Controller
                 Builder $query,
             ) use ($filters): void {
                 $query->where('contact_id', (int) $filters['contact']);
+            })
+            ->when($filters['activity'] !== 'all', function (
+                Builder $query,
+            ) use ($filters): void {
+                $query->where('activity_id', (int) $filters['activity']);
+            })
+            ->when($filters['follow_up'] !== 'all', function (
+                Builder $query,
+            ) use ($filters): void {
+                match ($filters['follow_up']) {
+                    'due' => $query
+                        ->whereNotNull('next_follow_up_at')
+                        ->whereDate(
+                            'next_follow_up_at',
+                            '<=',
+                            now()->toDateString(),
+                        ),
+                    'upcoming' => $query
+                        ->whereNotNull('next_follow_up_at')
+                        ->whereDate(
+                            'next_follow_up_at',
+                            '>',
+                            now()->toDateString(),
+                        ),
+                    'none' => $query->whereNull('next_follow_up_at'),
+                    default => null,
+                };
             })
             ->when($searchTerms->isNotEmpty(), function (Builder $query) use (
                 $searchTerms,
@@ -107,6 +158,7 @@ class ActivityController extends Controller
                             ->orWhere('type', 'like', $likeTerm)
                             ->orWhere('status', 'like', $likeTerm)
                             ->orWhere('source', 'like', $likeTerm)
+                            ->orWhere('outcome', 'like', $likeTerm)
                             ->orWhere('notes', 'like', $likeTerm)
                             ->orWhereHas(
                                 'company',
@@ -127,30 +179,47 @@ class ActivityController extends Controller
                                     'like',
                                     $likeTerm,
                                 ),
+                            )
+                            ->orWhereHas(
+                                'activity',
+                                fn (
+                                    Builder $activityQuery,
+                                ): Builder => $activityQuery->where(
+                                    'name',
+                                    'like',
+                                    $likeTerm,
+                                ),
                             );
                     });
                 }
             });
 
-        $activities->orderBy($filters['sort'], $filters['direction']);
+        if ($filters['sort'] === 'next_follow_up_at') {
+            $tasks
+                ->orderByRaw('next_follow_up_at is null')
+                ->orderBy('next_follow_up_at', $filters['direction']);
+        } else {
+            $tasks->orderBy($filters['sort'], $filters['direction']);
+        }
 
-        $activities = $activities
+        $tasks = $tasks
             ->orderByDesc('id')
             ->paginate($filters['per_page'])
             ->withQueryString();
 
-        return view('activities.index', [
-            'activities' => $activities,
+        return view('tasks.index', [
+            'tasks' => $tasks,
             'search' => $filters['search'],
             'filters' => $filters,
-            'statuses' => Activity::statuses(),
-            'types' => Activity::types(),
+            'statuses' => Task::statuses(),
+            'types' => Task::types(),
             'sortOptions' => [
                 'updated_at' => __('Recently updated'),
-                'name' => __('Activity title'),
+                'name' => __('Task title'),
                 'type' => __('Type'),
                 'status' => __('Status'),
-                'activity_at' => __('Activity date'),
+                'task_at' => __('Task date'),
+                'next_follow_up_at' => __('Next follow-up'),
                 'created_at' => __('Created date'),
             ],
             'perPageOptions' => self::PER_PAGE_OPTIONS,
@@ -162,38 +231,39 @@ class ActivityController extends Controller
      */
     public function create(Request $request): View
     {
-        $this->authorize('create', Activity::class);
+        $this->authorize('create', Task::class);
 
-        return view('activities.create', [
-            'statuses' => Activity::statuses(),
-            'types' => Activity::types(),
+        return view('tasks.create', [
+            'statuses' => Task::statuses(),
+            'types' => Task::types(),
             'companies' => $this->companyOptionsForUser($request),
             'contacts' => $this->contactOptionsForUser($request),
+            'activities' => $this->activityOptionsForUser($request),
         ]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreActivityRequest $request): RedirectResponse
+    public function store(StoreTaskRequest $request): RedirectResponse
     {
         try {
             /** @var User $user */
             $user = $request->user();
 
-            $activity = $user->activities()->create($request->validated());
+            $task = $user->tasks()->create($request->validated());
 
             return redirect()
-                ->route('activities.show', $activity)
-                ->with('status', __('Activity created successfully.'));
+                ->route('tasks.show', $task)
+                ->with('status', __('Task created successfully.'));
         } catch (Throwable $exception) {
             report($exception);
 
             return back()
                 ->withInput()
                 ->withErrors([
-                    'activity' => __(
-                        'We could not create this activity right now. Please try again.',
+                    'task' => __(
+                        'We could not create this task right now. Please try again.',
                     ),
                 ]);
         }
@@ -204,12 +274,12 @@ class ActivityController extends Controller
      */
     public function show(Request $request, string $id): View
     {
-        $activity = $this->resolveActivity($request, $id);
+        $task = $this->resolveTask($request, $id);
 
-        $this->authorize('view', $activity);
+        $this->authorize('view', $task);
 
-        return view('activities.show', [
-            'activity' => $activity,
+        return view('tasks.show', [
+            'task' => $task,
         ]);
     }
 
@@ -218,16 +288,17 @@ class ActivityController extends Controller
      */
     public function edit(Request $request, string $id): View
     {
-        $activity = $this->resolveActivity($request, $id);
+        $task = $this->resolveTask($request, $id);
 
-        $this->authorize('update', $activity);
+        $this->authorize('update', $task);
 
-        return view('activities.edit', [
-            'activity' => $activity,
-            'statuses' => Activity::statuses(),
-            'types' => Activity::types(),
+        return view('tasks.edit', [
+            'task' => $task,
+            'statuses' => Task::statuses(),
+            'types' => Task::types(),
             'companies' => $this->companyOptionsForUser($request),
             'contacts' => $this->contactOptionsForUser($request),
+            'activities' => $this->activityOptionsForUser($request),
         ]);
     }
 
@@ -235,27 +306,27 @@ class ActivityController extends Controller
      * Update the specified resource in storage.
      */
     public function update(
-        UpdateActivityRequest $request,
+        UpdateTaskRequest $request,
         string $id,
     ): RedirectResponse {
-        $activity = $this->resolveActivity($request, $id);
+        $task = $this->resolveTask($request, $id);
 
-        $this->authorize('update', $activity);
+        $this->authorize('update', $task);
 
         try {
-            $activity->update($request->validated());
+            $task->update($request->validated());
 
             return redirect()
-                ->route('activities.show', $activity)
-                ->with('status', __('Activity updated successfully.'));
+                ->route('tasks.show', $task)
+                ->with('status', __('Task updated successfully.'));
         } catch (Throwable $exception) {
             report($exception);
 
             return back()
                 ->withInput()
                 ->withErrors([
-                    'activity' => __(
-                        'We could not update this activity right now. Please try again.',
+                    'task' => __(
+                        'We could not update this task right now. Please try again.',
                     ),
                 ]);
         }
@@ -266,38 +337,38 @@ class ActivityController extends Controller
      */
     public function destroy(Request $request, string $id): RedirectResponse
     {
-        $activity = $this->resolveActivity($request, $id);
+        $task = $this->resolveTask($request, $id);
 
-        $this->authorize('delete', $activity);
+        $this->authorize('delete', $task);
 
         try {
-            $activity->delete();
+            $task->delete();
 
             return redirect()
-                ->route('activities.index')
-                ->with('status', __('Activity deleted successfully.'));
+                ->route('tasks.index')
+                ->with('status', __('Task deleted successfully.'));
         } catch (Throwable $exception) {
             report($exception);
 
             return redirect()
-                ->route('activities.index')
+                ->route('tasks.index')
                 ->withErrors([
-                    'activity' => __(
-                        'We could not delete this activity right now. Please try again.',
+                    'task' => __(
+                        'We could not delete this task right now. Please try again.',
                     ),
                 ]);
         }
     }
 
     /**
-     * Resolve the activity ensuring user-level data isolation.
+     * Resolve the task ensuring user-level data isolation.
      */
-    private function resolveActivity(Request $request, string $id): Activity
+    private function resolveTask(Request $request, string $id): Task
     {
         /** @var User $user */
         $user = $request->user();
 
-        return Activity::query()
+        return Task::query()
             ->where('user_id', $user->id)
             ->whereKey($id)
             ->firstOrFail();
@@ -306,7 +377,7 @@ class ActivityController extends Controller
     /**
      * Normalize and whitelist index filters.
      *
-     * @return array{search:string,status:string,type:string,company:string,contact:string,sort:string,direction:string,per_page:int}
+     * @return array{search:string,status:string,type:string,active:string,follow_up:string,company:string,contact:string,activity:string,sort:string,direction:string,per_page:int}
      */
     private function sanitizeIndexFilters(Request $request): array
     {
@@ -316,17 +387,29 @@ class ActivityController extends Controller
             ->toString();
 
         $status = (string) $request->query('status', 'all');
-        $allowedStatuses = array_merge(['all'], Activity::statuses());
+        $allowedStatuses = array_merge(['all'], Task::statuses());
 
         if (! in_array($status, $allowedStatuses, true)) {
             $status = 'all';
         }
 
         $type = (string) $request->query('type', 'all');
-        $allowedTypes = array_merge(['all'], Activity::types());
+        $allowedTypes = array_merge(['all'], Task::types());
 
         if (! in_array($type, $allowedTypes, true)) {
             $type = 'all';
+        }
+
+        $active = (string) $request->query('active', 'all');
+
+        if (! in_array($active, self::ACTIVE_FILTERS, true)) {
+            $active = 'all';
+        }
+
+        $followUp = (string) $request->query('follow_up', 'all');
+
+        if (! in_array($followUp, self::FOLLOW_UP_FILTERS, true)) {
+            $followUp = 'all';
         }
 
         /** @var User|null $user */
@@ -342,6 +425,12 @@ class ActivityController extends Controller
             value: (string) $request->query('contact', 'all'),
             user: $user,
             model: Contact::class,
+        );
+
+        $activity = $this->sanitizeOwnedRelationFilter(
+            value: (string) $request->query('activity', 'all'),
+            user: $user,
+            model: Activity::class,
         );
 
         $sort = (string) $request->query('sort', 'updated_at');
@@ -366,8 +455,11 @@ class ActivityController extends Controller
             'search' => $search,
             'status' => $status,
             'type' => $type,
+            'active' => $active,
+            'follow_up' => $followUp,
             'company' => $company,
             'contact' => $contact,
+            'activity' => $activity,
             'sort' => $sort,
             'direction' => $direction,
             'per_page' => $perPage,
@@ -405,6 +497,24 @@ class ActivityController extends Controller
             ->contacts()
             ->select(['id', 'name'])
             ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Get activity options for the authenticated user.
+     *
+     * @return Collection<int, Activity>
+     */
+    private function activityOptionsForUser(Request $request): Collection
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        return $user
+            ->activities()
+            ->select(['id', 'name', 'activity_at'])
+            ->orderByDesc('activity_at')
+            ->orderByDesc('id')
             ->get();
     }
 

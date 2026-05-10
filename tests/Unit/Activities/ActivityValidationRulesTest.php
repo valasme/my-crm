@@ -50,9 +50,6 @@ test('activity validation rules accept a complete valid payload', function () {
             'status' => 'planned',
             'source' => 'Inbound',
             'activity_at' => '2026-01-10',
-            'next_follow_up_at' => '2026-01-20',
-            'is_active' => true,
-            'outcome' => 'Meeting confirmed',
             'notes' => 'Important activity.',
         ],
         activityRulesHarness()->rules($user->id),
@@ -76,7 +73,6 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'activity_at' => '2026-01-10',
-                'is_active' => true,
             ],
             activityRulesHarness()->rules($user->id),
         );
@@ -92,7 +88,6 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'activity_at' => '2026-01-10',
-                'is_active' => true,
             ],
             activityRulesHarness()->rules($user->id, $existing->id),
         );
@@ -110,7 +105,6 @@ test('activity validation rules enforce allowed statuses', function () {
             'type' => 'call',
             'status' => 'invalid',
             'activity_at' => '2026-01-10',
-            'is_active' => true,
         ],
         activityRulesHarness()->rules($user->id),
     );
@@ -132,7 +126,6 @@ test('activity validation rules enforce allowed activity types', function () {
             'type' => 'carrier-pigeon',
             'status' => 'planned',
             'activity_at' => '2026-01-10',
-            'is_active' => true,
         ],
         activityRulesHarness()->rules($user->id),
     );
@@ -162,7 +155,6 @@ test(
                 'type' => 'call',
                 'status' => 'planned',
                 'activity_at' => '2026-01-10',
-                'is_active' => true,
                 'company_id' => $otherUsersCompany->id,
                 'contact_id' => $otherUsersContact->id,
             ],
@@ -179,30 +171,6 @@ test(
 );
 
 test(
-    'activity validation rules enforce follow-up date after or equal activity date',
-    function () {
-        $user = User::factory()->create();
-
-        $validator = Validator::make(
-            [
-                'name' => 'Date Rule Activity',
-                'type' => 'meeting',
-                'status' => 'planned',
-                'activity_at' => '2026-01-10',
-                'next_follow_up_at' => '2026-01-01',
-                'is_active' => true,
-            ],
-            activityRulesHarness()->rules($user->id),
-        );
-
-        expect($validator->fails())
-            ->toBeTrue()
-            ->and($validator->errors()->has('next_follow_up_at'))
-            ->toBeTrue();
-    },
-);
-
-test(
     'activity sanitization trims text, lowercases enums, and normalizes nullable fields',
     function () {
         $sanitized = activityRulesHarness()->sanitize([
@@ -210,12 +178,9 @@ test(
             'type' => 'EMAIL',
             'status' => 'COMPLETED',
             'source' => '  <i>Inbound</i>  ',
-            'outcome' => '  <script>alert(1)</script> Closed won  ',
             'notes' => "<script>bad()</script> Hello\r\nWorld",
             'company_id' => '',
             'contact_id' => '',
-            'next_follow_up_at' => '',
-            'is_active' => '0',
         ]);
 
         expect($sanitized['name'])
@@ -226,17 +191,11 @@ test(
             ->toBe('completed')
             ->and($sanitized['source'])
             ->toBe('Inbound')
-            ->and($sanitized['outcome'])
-            ->toBe('alert(1) Closed won')
             ->and($sanitized['notes'])
             ->toBe("bad() Hello\nWorld")
             ->and($sanitized['company_id'])
             ->toBeNull()
             ->and($sanitized['contact_id'])
-            ->toBeNull()
-            ->and($sanitized['next_follow_up_at'])
-            ->toBeNull()
-            ->and($sanitized['is_active'])
-            ->toBeFalse();
+            ->toBeNull();
     },
 );

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Activity;
+use App\Models\Task;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -72,9 +73,34 @@ new #[Title("Activity Details")] class extends Component {
                 "type",
                 "status",
                 "activity_at",
-                "next_follow_up_at",
             ])
             ->orderByDesc("activity_at")
+            ->orderByDesc("id")
+            ->limit(12)
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, Task>
+     */
+    #[Computed]
+    public function relatedTasks(): Collection
+    {
+        return Task::query()
+            ->where("user_id", Auth::id())
+            ->where("activity_id", $this->activity->id)
+            ->with(["company:id,name,user_id", "contact:id,name,user_id"])
+            ->select([
+                "id",
+                "company_id",
+                "contact_id",
+                "name",
+                "type",
+                "status",
+                "task_at",
+                "next_follow_up_at",
+            ])
+            ->orderByDesc("task_at")
             ->orderByDesc("id")
             ->limit(12)
             ->get();
@@ -89,8 +115,6 @@ new #[Title("Activity Details")] class extends Component {
                 'search',
                 'status',
                 'type',
-                'active',
-                'follow_up',
                 'company',
                 'contact',
                 'sort',
@@ -118,7 +142,7 @@ new #[Title("Activity Details")] class extends Component {
                         {{ \Illuminate\Support\Str::headline($activity->type) }}
                     </flux:badge>
 
-                    <flux:badge>{{ $activity->is_active ? __('Active') : __('Inactive') }}</flux:badge>
+
 
                     @if ($activity->company)
                         <flux:badge>{{ $activity->company->name }}</flux:badge>
@@ -195,14 +219,7 @@ new #[Title("Activity Details")] class extends Component {
                     <flux:text>{{ __('Activity date') }}</flux:text>
                     <flux:text>{{ $activity->activity_at?->format('M d, Y') ?: '—' }}</flux:text>
                 </div>
-                <div class="grid gap-1 sm:grid-cols-[180px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Next follow-up') }}</flux:text>
-                    <flux:text>{{ $activity->next_follow_up_at?->format('M d, Y') ?: '—' }}</flux:text>
-                </div>
-                <div class="grid gap-1 sm:grid-cols-[180px_1fr] sm:gap-3">
-                    <flux:text>{{ __('Outcome') }}</flux:text>
-                    <flux:text>{{ $activity->outcome ?: '—' }}</flux:text>
-                </div>
+
             </div>
         </flux:card>
 
@@ -234,15 +251,7 @@ new #[Title("Activity Details")] class extends Component {
                         @endif
                     </flux:text>
                 </div>
-                <div class="pt-2">
-                    <flux:button
-                        variant="ghost"
-                        :href="route('activities.create', array_filter(['company_id' => $activity->company_id, 'contact_id' => $activity->contact_id]))"
-                        wire:navigate
-                    >
-                        {{ __('Log follow-up activity') }}
-                    </flux:button>
-                </div>
+
             </div>
         </flux:card>
     </div>
@@ -269,12 +278,52 @@ new #[Title("Activity Details")] class extends Component {
 
                     <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                         {{ __('Date: :date', ['date' => $timelineItem->activity_at?->format('M d, Y') ?: '—']) }}
+                    </div>
+                </div>
+            @empty
+                <flux:text>{{ __('No related timeline entries yet.') }}</flux:text>
+            @endforelse
+        </div>
+    </flux:card>
+
+    <flux:card>
+        <div class="flex items-center justify-between gap-2">
+            <flux:heading>{{ __('Related Tasks') }}</flux:heading>
+            <flux:button
+                variant="ghost"
+                :href="route('tasks.create', array_filter(['company_id' => $activity->company_id, 'contact_id' => $activity->contact_id, 'activity_id' => $activity->id]))"
+                wire:navigate
+            >
+                {{ __('Create task') }}
+            </flux:button>
+        </div>
+
+        <div class="mt-4 space-y-3">
+            @forelse ($this->relatedTasks as $timelineItem)
+                <div class="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <flux:link :href="route('tasks.show', $timelineItem)" wire:navigate>
+                            {{ $timelineItem->name }}
+                        </flux:link>
+
+                        <div class="flex items-center gap-2">
+                            <flux:badge>{{ \Illuminate\Support\Str::headline($timelineItem->type) }}</flux:badge>
+                            <flux:badge>{{ \Illuminate\Support\Str::headline($timelineItem->status) }}</flux:badge>
+                        </div>
+                    </div>
+
+                    <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {{ __('Date: :date', ['date' => $timelineItem->task_at?->format('M d, Y') ?: '—']) }}
+                        ·
+                        {{ __('Company: :company', ['company' => $timelineItem->company?->name ?: '—']) }}
+                        ·
+                        {{ __('Contact: :contact', ['contact' => $timelineItem->contact?->name ?: '—']) }}
                         ·
                         {{ __('Next follow-up: :date', ['date' => $timelineItem->next_follow_up_at?->format('M d, Y') ?: '—']) }}
                     </div>
                 </div>
             @empty
-                <flux:text>{{ __('No related timeline entries yet.') }}</flux:text>
+                <flux:text>{{ __('No tasks linked to this activity yet.') }}</flux:text>
             @endforelse
         </div>
     </flux:card>

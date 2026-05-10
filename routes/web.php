@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'welcome')->name('home');
@@ -80,6 +81,29 @@ Route::middleware(['auth'])->group(function () {
         ->only(['store', 'update', 'destroy'])
         ->whereNumber('activity')
         ->middleware('throttle:activities-write');
+
+    Route::livewire('tasks', 'pages::tasks.index')
+        ->name('tasks.index')
+        ->middleware('throttle:tasks-read');
+
+    Route::livewire('tasks/create', 'pages::tasks.create')
+        ->name('tasks.create')
+        ->middleware('throttle:tasks-read');
+
+    Route::livewire('tasks/{task}/edit', 'pages::tasks.edit')
+        ->name('tasks.edit')
+        ->whereNumber('task')
+        ->middleware('throttle:tasks-read');
+
+    Route::livewire('tasks/{task}', 'pages::tasks.show')
+        ->name('tasks.show')
+        ->whereNumber('task')
+        ->middleware('throttle:tasks-read');
+
+    Route::resource('tasks', TaskController::class)
+        ->only(['store', 'update', 'destroy'])
+        ->whereNumber('task')
+        ->middleware('throttle:tasks-write');
 });
 
 require __DIR__.'/settings.php';

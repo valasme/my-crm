@@ -139,4 +139,14 @@ class Company extends Model
     {
         return $this->hasMany(Activity::class);
     }
+
+    /**
+     * Get tasks associated with the company.
+     *
+     * @return HasMany<Task>
+     */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class);
+    }
 }
