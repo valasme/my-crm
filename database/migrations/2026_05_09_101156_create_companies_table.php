@@ -36,10 +36,6 @@ return new class extends Migration
             $table->string('preferred_contact_method', 50)->nullable();
             $table->string('tax_id', 100)->nullable();
 
-            $table->string('primary_contact_name')->nullable();
-            $table->string('primary_contact_email')->nullable();
-            $table->string('primary_contact_phone', 50)->nullable();
-
             $table->string('address_line_1')->nullable();
             $table->string('address_line_2')->nullable();
             $table->string('city', 120)->nullable();

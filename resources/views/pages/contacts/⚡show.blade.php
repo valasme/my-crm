@@ -42,7 +42,6 @@ new #[Title("Contact Details")] class extends Component {
                 "type",
                 "status",
                 "activity_at",
-                "next_follow_up_at",
             ])
             ->orderByDesc("activity_at")
             ->orderByDesc("id")
@@ -276,8 +275,6 @@ new #[Title("Contact Details")] class extends Component {
                         {{ __('Date: :date', ['date' => $timelineItem->activity_at?->format('M d, Y') ?: '—']) }}
                         ·
                         {{ __('Company: :company', ['company' => $timelineItem->company?->name ?: '—']) }}
-                        ·
-                        {{ __('Next follow-up: :date', ['date' => $timelineItem->next_follow_up_at?->format('M d, Y') ?: '—']) }}
                     </div>
                 </div>
             @empty

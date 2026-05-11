@@ -71,9 +71,6 @@ class CompanyFactory extends Factory
                 ->optional()
                 ->randomElement(Company::preferredContactMethods()),
             'tax_id' => fake()->optional()->bothify('??-#######'),
-            'primary_contact_name' => fake()->optional()->name(),
-            'primary_contact_email' => fake()->optional()->safeEmail(),
-            'primary_contact_phone' => fake()->optional()->phoneNumber(),
             'address_line_1' => fake()->optional()->streetAddress(),
             'address_line_2' => fake()->optional()->words(2, true),
             'city' => fake()->optional()->city(),

@@ -33,6 +33,7 @@ class Company extends Model
      * @var array<int, string>
      */
     protected $fillable = [
+        'primary_contact_id',
         'name',
         'legal_name',
         'status',
@@ -51,9 +52,6 @@ class Company extends Model
         'timezone',
         'preferred_contact_method',
         'tax_id',
-        'primary_contact_name',
-        'primary_contact_email',
-        'primary_contact_phone',
         'address_line_1',
         'address_line_2',
         'city',
@@ -74,6 +72,7 @@ class Company extends Model
     protected function casts(): array
     {
         return [
+            'primary_contact_id' => 'integer',
             'founded_year' => 'integer',
             'annual_revenue' => 'decimal:2',
             'employee_count' => 'integer',
@@ -128,6 +127,16 @@ class Company extends Model
     public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);
+    }
+
+    /**
+     * Get the designated primary contact for this company.
+     *
+     * @return BelongsTo<Contact, Company>
+     */
+    public function primaryContact(): BelongsTo
+    {
+        return $this->belongsTo(Contact::class, 'primary_contact_id');
     }
 
     /**

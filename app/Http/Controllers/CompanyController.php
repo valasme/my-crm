@@ -66,14 +66,18 @@ class CompanyController extends Controller
 
         $companies = $user
             ->companies()
+            ->with([
+                'primaryContact' => fn ($contactQuery) => $contactQuery
+                    ->select(['id', 'name', 'email', 'user_id'])
+                    ->where('user_id', $user->id),
+            ])
             ->select([
                 'id',
+                'primary_contact_id',
                 'name',
                 'industry',
                 'status',
                 'is_active',
-                'primary_contact_name',
-                'primary_contact_email',
                 'preferred_contact_method',
                 'next_follow_up_at',
                 'updated_at',
@@ -125,11 +129,23 @@ class CompanyController extends Controller
                             ->orWhere('legal_name', 'like', $likeTerm)
                             ->orWhere('industry', 'like', $likeTerm)
                             ->orWhere('source', 'like', $likeTerm)
-                            ->orWhere('primary_contact_name', 'like', $likeTerm)
-                            ->orWhere(
-                                'primary_contact_email',
-                                'like',
-                                $likeTerm,
+                            ->orWhereHas(
+                                'primaryContact',
+                                fn (
+                                    Builder $contactQuery,
+                                ): Builder => $contactQuery
+                                    ->where('user_id', $user->id)
+                                    ->where(function (
+                                        Builder $scopedContactQuery,
+                                    ) use ($likeTerm): void {
+                                        $scopedContactQuery
+                                            ->where('name', 'like', $likeTerm)
+                                            ->orWhere(
+                                                'email',
+                                                'like',
+                                                $likeTerm,
+                                            );
+                                    }),
                             )
                             ->orWhere('email', 'like', $likeTerm)
                             ->orWhere('phone', 'like', $likeTerm)

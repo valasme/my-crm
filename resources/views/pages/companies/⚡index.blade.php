@@ -111,14 +111,18 @@ new #[Title("Companies")] class extends Component {
 
         $companies = $user
             ->companies()
+            ->with([
+                "primaryContact" => fn($contactQuery) => $contactQuery
+                    ->select(["id", "name", "email", "user_id"])
+                    ->where("user_id", $user->id),
+            ])
             ->select([
                 "id",
+                "primary_contact_id",
                 "name",
                 "industry",
                 "status",
                 "is_active",
-                "primary_contact_name",
-                "primary_contact_email",
                 "preferred_contact_method",
                 "next_follow_up_at",
                 "updated_at",
@@ -145,6 +149,7 @@ new #[Title("Companies")] class extends Component {
             })
             ->when($searchTerms->isNotEmpty(), function (Builder $query) use (
                 $searchTerms,
+                $user,
             ): void {
                 foreach ($searchTerms as $term) {
                     $escapedTerm = addcslashes($term, "%_\\");
@@ -152,17 +157,26 @@ new #[Title("Companies")] class extends Component {
 
                     $query->where(function (Builder $innerQuery) use (
                         $likeTerm,
+                        $user,
                     ): void {
                         $innerQuery
                             ->where("name", "like", $likeTerm)
                             ->orWhere("legal_name", "like", $likeTerm)
                             ->orWhere("industry", "like", $likeTerm)
                             ->orWhere("source", "like", $likeTerm)
-                            ->orWhere("primary_contact_name", "like", $likeTerm)
-                            ->orWhere(
-                                "primary_contact_email",
-                                "like",
-                                $likeTerm,
+                            ->orWhereHas(
+                                "primaryContact",
+                                fn(
+                                    Builder $contactQuery,
+                                ): Builder => $contactQuery
+                                    ->where("user_id", $user->id)
+                                    ->where(function (
+                                        Builder $scopedContactQuery,
+                                    ) use ($likeTerm): void {
+                                        $scopedContactQuery
+                                            ->where("name", "like", $likeTerm)
+                                            ->orWhere("email", "like", $likeTerm);
+                                    }),
                             )
                             ->orWhere("email", "like", $likeTerm)
                             ->orWhere("phone", "like", $likeTerm)
@@ -571,9 +585,9 @@ new #[Title("Companies")] class extends Component {
                     </flux:table.cell>
                     <flux:table.cell class="hidden sm:table-cell">
                         <div class="space-y-1">
-                            <div>{{ $company->primary_contact_name ?: '—' }}</div>
-                            @if ($company->primary_contact_email)
-                                <flux:text class="text-xs">{{ $company->primary_contact_email }}</flux:text>
+                            <div>{{ $company->primaryContact?->name ?: '—' }}</div>
+                            @if ($company->primaryContact?->email)
+                                <flux:text class="text-xs">{{ $company->primaryContact->email }}</flux:text>
                             @endif
                         </div>
                     </flux:table.cell>

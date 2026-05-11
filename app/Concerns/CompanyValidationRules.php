@@ -3,6 +3,7 @@
 namespace App\Concerns;
 
 use App\Models\Company;
+use App\Models\Contact;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 
@@ -20,6 +21,41 @@ trait CompanyValidationRules
      */
     protected function companyRules(int $userId, ?int $companyId = null): array
     {
+        $primaryContactRules = ['nullable', 'prohibited'];
+
+        if ($companyId !== null) {
+            $primaryContactRules = [
+                'nullable',
+                'integer',
+                Rule::exists(Contact::class, 'id')->where(
+                    fn ($query) => $query->where('user_id', $userId),
+                ),
+                function (string $attribute, mixed $value, \Closure $fail) use (
+                    $userId,
+                    $companyId,
+                ): void {
+                    $contactId = $this->nullableInteger($value);
+
+                    if ($contactId === null) {
+                        return;
+                    }
+
+                    $contactCompanyId = Contact::query()
+                        ->where('user_id', $userId)
+                        ->whereKey($contactId)
+                        ->value('company_id');
+
+                    if ((int) ($contactCompanyId ?? 0) !== $companyId) {
+                        $fail(
+                            __(
+                                'The selected primary contact must belong to this company.',
+                            ),
+                        );
+                    }
+                },
+            ];
+        }
+
         return [
             'user_id' => ['prohibited'],
             'name' => $this->nameRules($userId, $companyId),
@@ -126,14 +162,7 @@ trait CompanyValidationRules
                 Rule::in(Company::preferredContactMethods()),
             ],
             'tax_id' => ['nullable', 'string', 'max:100'],
-            'primary_contact_name' => ['nullable', 'string', 'max:255'],
-            'primary_contact_email' => ['nullable', 'email', 'max:255'],
-            'primary_contact_phone' => [
-                'nullable',
-                'string',
-                'max:50',
-                'regex:'.self::PHONE_REGEX,
-            ],
+            'primary_contact_id' => $primaryContactRules,
             'address_line_1' => ['nullable', 'string', 'max:255'],
             'address_line_2' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:120'],
@@ -193,9 +222,6 @@ trait CompanyValidationRules
             'timezone',
             'preferred_contact_method',
             'tax_id',
-            'primary_contact_name',
-            'primary_contact_email',
-            'primary_contact_phone',
             'address_line_1',
             'address_line_2',
             'city',
@@ -223,9 +249,7 @@ trait CompanyValidationRules
                 $notes === '' ? null : preg_replace('/\r\n|\r/', "\n", $notes);
         }
 
-        foreach (
-            ['email', 'billing_email', 'primary_contact_email'] as $emailField
-        ) {
+        foreach (['email', 'billing_email'] as $emailField) {
             if (
                 ! array_key_exists($emailField, $input) ||
                 ! is_string($input[$emailField])
@@ -262,6 +286,13 @@ trait CompanyValidationRules
             $input['founded_year'] = null;
         }
 
+        if (
+            array_key_exists('primary_contact_id', $input) &&
+            $input['primary_contact_id'] === ''
+        ) {
+            $input['primary_contact_id'] = null;
+        }
+
         if (array_key_exists('is_active', $input)) {
             $bool = filter_var(
                 $input['is_active'],
@@ -275,6 +306,23 @@ trait CompanyValidationRules
         }
 
         return $input;
+    }
+
+    private function nullableInteger(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $id = filter_var($value, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        if ($id === false) {
+            return null;
+        }
+
+        return (int) $id;
     }
 
     protected function normalizeUrl(mixed $value): ?string

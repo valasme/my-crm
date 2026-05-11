@@ -34,6 +34,36 @@ trait ActivityValidationRules
                 Rule::exists(Contact::class, 'id')->where(
                     fn ($query) => $query->where('user_id', $userId),
                 ),
+                function (string $attribute, mixed $value, \Closure $fail) use (
+                    $userId,
+                ): void {
+                    $contactId = $this->nullableInteger($value);
+
+                    if ($contactId === null) {
+                        return;
+                    }
+
+                    $companyId = $this->nullableInteger(
+                        request()->input('company_id'),
+                    );
+
+                    if ($companyId === null) {
+                        return;
+                    }
+
+                    $contactCompanyId = Contact::query()
+                        ->where('user_id', $userId)
+                        ->whereKey($contactId)
+                        ->value('company_id');
+
+                    if ((int) ($contactCompanyId ?? 0) !== $companyId) {
+                        $fail(
+                            __(
+                                'The selected contact does not belong to the selected company.',
+                            ),
+                        );
+                    }
+                },
             ],
             'name' => $this->nameRules($userId, $activityId),
             'type' => ['required', 'string', Rule::in(Activity::types())],
@@ -115,6 +145,40 @@ trait ActivityValidationRules
             $input['activity_at'] = null;
         }
 
+        $userId = request()->user()?->id;
+
+        if ($userId !== null) {
+            $companyId = $this->nullableInteger($input['company_id'] ?? null);
+            $contactId = $this->nullableInteger($input['contact_id'] ?? null);
+
+            if ($companyId === null && $contactId !== null) {
+                $contactCompanyId = Contact::query()
+                    ->where('user_id', $userId)
+                    ->whereKey($contactId)
+                    ->value('company_id');
+
+                $input['company_id'] =
+                    $contactCompanyId === null ? null : (int) $contactCompanyId;
+            }
+        }
+
         return $input;
+    }
+
+    private function nullableInteger(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $id = filter_var($value, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        if ($id === false) {
+            return null;
+        }
+
+        return (int) $id;
     }
 }

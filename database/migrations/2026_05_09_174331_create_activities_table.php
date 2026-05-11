@@ -30,9 +30,6 @@ return new class extends Migration
             $table->string('status', 50)->default('planned');
             $table->string('source', 120)->nullable();
             $table->date('activity_at');
-            $table->date('next_follow_up_at')->nullable();
-            $table->boolean('is_active')->default(true);
-            $table->string('outcome', 1000)->nullable();
             $table->text('notes')->nullable();
 
             $table->timestamps();
@@ -40,8 +37,7 @@ return new class extends Migration
             $table->unique(['user_id', 'name']);
             $table->index(['user_id', 'status']);
             $table->index(['user_id', 'type']);
-            $table->index(['user_id', 'is_active']);
-            $table->index(['user_id', 'next_follow_up_at']);
+
             $table->index(['user_id', 'company_id']);
             $table->index(['user_id', 'contact_id']);
         });

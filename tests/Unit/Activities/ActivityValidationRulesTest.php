@@ -171,6 +171,41 @@ test(
 );
 
 test(
+    'activity validation rules enforce contact and company consistency for same user records',
+    function () {
+        $user = User::factory()->create();
+
+        $companyA = Company::factory()->for($user)->create();
+        $companyB = Company::factory()->for($user)->create();
+
+        $contactB = Contact::factory()
+            ->for($user)
+            ->create(['company_id' => $companyB->id]);
+
+        $payload = [
+            'name' => 'Relationship Activity',
+            'type' => 'call',
+            'status' => 'planned',
+            'activity_at' => '2026-01-10',
+            'company_id' => $companyA->id,
+            'contact_id' => $contactB->id,
+        ];
+
+        request()->replace($payload);
+
+        $validator = Validator::make(
+            $payload,
+            activityRulesHarness()->rules($user->id),
+        );
+
+        expect($validator->fails())
+            ->toBeTrue()
+            ->and($validator->errors()->has('contact_id'))
+            ->toBeTrue();
+    },
+);
+
+test(
     'activity sanitization trims text, lowercases enums, and normalizes nullable fields',
     function () {
         $sanitized = activityRulesHarness()->sanitize([

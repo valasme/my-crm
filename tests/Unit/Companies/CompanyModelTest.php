@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -19,6 +20,27 @@ test('company belongs to a user', function () {
         ->toBe($company->user_id)
         ->and($company->user_id)
         ->toBe($user->id);
+});
+
+test('company may belong to a primary contact', function () {
+    $user = User::factory()->create();
+
+    $company = Company::factory()->for($user)->create();
+
+    $primaryContact = Contact::factory()
+        ->for($user)
+        ->create([
+            'company_id' => $company->id,
+        ]);
+
+    $company->update(['primary_contact_id' => $primaryContact->id]);
+
+    expect($company->fresh()?->primaryContact)
+        ->not->toBeNull()
+        ->and($company->fresh()?->primaryContact?->is($primaryContact))
+        ->toBeTrue()
+        ->and($company->fresh()?->primaryContact?->company_id)
+        ->toBe($company->id);
 });
 
 test('ownedBy scope returns only companies for the given user', function () {
@@ -99,7 +121,9 @@ test('company model exposes expected fillable attributes', function () {
     $fillable = new Company()->getFillable();
 
     expect($fillable)
-        ->toHaveCount(31)
+        ->toHaveCount(29)
+        ->and($fillable)
+        ->toContain('primary_contact_id')
         ->and($fillable)
         ->toContain('name')
         ->and($fillable)
@@ -127,15 +151,17 @@ test('company model exposes expected fillable attributes', function () {
         ->and($fillable)
         ->toContain('billing_email')
         ->and($fillable)
-        ->toContain('primary_contact_name')
-        ->and($fillable)
-        ->toContain('primary_contact_email')
-        ->and($fillable)
         ->toContain('next_follow_up_at')
         ->and($fillable)
         ->toContain('is_active')
         ->and($fillable)
         ->toContain('notes')
+        ->and($fillable)
+        ->not->toContain('primary_contact_name')
+        ->and($fillable)
+        ->not->toContain('primary_contact_email')
+        ->and($fillable)
+        ->not->toContain('primary_contact_phone')
         ->and($fillable)
         ->not->toContain('user_id');
 });
@@ -145,6 +171,8 @@ test('company model exposes expected casts', function () {
 
     expect($casts['id'])
         ->toBe('int')
+        ->and($casts['primary_contact_id'])
+        ->toBe('integer')
         ->and($casts['founded_year'])
         ->toBe('integer')
         ->and($casts['annual_revenue'])
@@ -160,6 +188,7 @@ test('company model exposes expected casts', function () {
         ->and(array_keys($casts))
         ->toBe([
             'id',
+            'primary_contact_id',
             'founded_year',
             'annual_revenue',
             'employee_count',

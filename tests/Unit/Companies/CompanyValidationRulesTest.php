@@ -2,6 +2,7 @@
 
 use App\Concerns\CompanyValidationRules;
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Validator;
@@ -34,6 +35,14 @@ function companyRulesHarness(): object
 test('company validation rules accept a complete valid payload', function () {
     $user = User::factory()->create();
 
+    $company = Company::factory()->for($user)->create();
+
+    $primaryContact = Contact::factory()
+        ->for($user)
+        ->create([
+            'company_id' => $company->id,
+        ]);
+
     $validator = Validator::make(
         [
             'name' => 'Valid Co',
@@ -54,9 +63,7 @@ test('company validation rules accept a complete valid payload', function () {
             'timezone' => 'UTC',
             'preferred_contact_method' => 'email',
             'tax_id' => '12-3456789',
-            'primary_contact_name' => 'Jordan Lee',
-            'primary_contact_email' => 'jordan@valid.example',
-            'primary_contact_phone' => '+1-555-0199',
+            'primary_contact_id' => $primaryContact->id,
             'address_line_1' => '123 Main St',
             'address_line_2' => 'Suite 2',
             'city' => 'Austin',
@@ -68,7 +75,7 @@ test('company validation rules accept a complete valid payload', function () {
             'is_active' => true,
             'notes' => 'Important account.',
         ],
-        companyRulesHarness()->rules($user->id),
+        companyRulesHarness()->rules($user->id, $company->id),
     );
 
     expect($validator->passes())->toBeTrue();
@@ -178,6 +185,80 @@ test(
 );
 
 test(
+    'company validation rules prohibit primary contact assignment during create context',
+    function () {
+        $user = User::factory()->create();
+
+        $contact = Contact::factory()->for($user)->create();
+
+        $validator = Validator::make(
+            [
+                'name' => 'Create Context Co',
+                'status' => 'lead',
+                'is_active' => true,
+                'primary_contact_id' => $contact->id,
+            ],
+            companyRulesHarness()->rules($user->id),
+        );
+
+        expect($validator->fails())
+            ->toBeTrue()
+            ->and($validator->errors()->has('primary_contact_id'))
+            ->toBeTrue();
+    },
+);
+
+test(
+    'company validation rules enforce primary contact ownership and company alignment',
+    function () {
+        $user = User::factory()->create();
+
+        $company = Company::factory()->for($user)->create();
+
+        $otherCompany = Company::factory()->for($user)->create();
+
+        $otherCompanyContact = Contact::factory()
+            ->for($user)
+            ->create([
+                'company_id' => $otherCompany->id,
+            ]);
+
+        $otherUser = User::factory()->create();
+
+        $otherUserContact = Contact::factory()->for($otherUser)->create();
+
+        $wrongCompanyValidator = Validator::make(
+            [
+                'name' => $company->name,
+                'status' => $company->status,
+                'is_active' => $company->is_active,
+                'primary_contact_id' => $otherCompanyContact->id,
+            ],
+            companyRulesHarness()->rules($user->id, $company->id),
+        );
+
+        $wrongOwnerValidator = Validator::make(
+            [
+                'name' => $company->name,
+                'status' => $company->status,
+                'is_active' => $company->is_active,
+                'primary_contact_id' => $otherUserContact->id,
+            ],
+            companyRulesHarness()->rules($user->id, $company->id),
+        );
+
+        expect($wrongCompanyValidator->fails())
+            ->toBeTrue()
+            ->and($wrongCompanyValidator->errors()->has('primary_contact_id'))
+            ->toBeTrue()
+            ->and($wrongOwnerValidator->fails())
+            ->toBeTrue()
+            ->and($wrongOwnerValidator->errors()->has('primary_contact_id'))
+            ->toBeTrue();
+    },
+);
+
+test(
     'company sanitization trims text, normalizes urls and lowercases emails',
     function () {
         $sanitized = companyRulesHarness()->sanitize([
@@ -187,6 +268,7 @@ test(
             'website' => 'example.org',
             'linkedin_url' => 'linkedin.com/company/acme',
             'preferred_contact_method' => 'EMAIL',
+            'primary_contact_id' => '',
             'notes' => '<script>alert(1)</script> Hello',
         ]);
 
@@ -202,6 +284,8 @@ test(
             ->toBe('https://linkedin.com/company/acme')
             ->and($sanitized['preferred_contact_method'])
             ->toBe('email')
+            ->and($sanitized['primary_contact_id'])
+            ->toBeNull()
             ->and($sanitized['notes'])
             ->toBe('alert(1) Hello');
     },

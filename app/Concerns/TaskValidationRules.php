@@ -255,6 +255,44 @@ trait TaskValidationRules
             }
         }
 
+        $userId = request()->user()?->id;
+
+        if ($userId !== null) {
+            $companyId = $this->nullableInteger($input['company_id'] ?? null);
+            $contactId = $this->nullableInteger($input['contact_id'] ?? null);
+            $activityId = $this->nullableInteger($input['activity_id'] ?? null);
+
+            if ($activityId !== null) {
+                $activity = Activity::query()
+                    ->select(['id', 'company_id', 'contact_id'])
+                    ->where('user_id', $userId)
+                    ->whereKey($activityId)
+                    ->first();
+
+                if ($activity !== null) {
+                    if ($companyId === null && $activity->company_id !== null) {
+                        $input['company_id'] = (int) $activity->company_id;
+                        $companyId = (int) $activity->company_id;
+                    }
+
+                    if ($contactId === null && $activity->contact_id !== null) {
+                        $input['contact_id'] = (int) $activity->contact_id;
+                        $contactId = (int) $activity->contact_id;
+                    }
+                }
+            }
+
+            if ($companyId === null && $contactId !== null) {
+                $contactCompanyId = Contact::query()
+                    ->where('user_id', $userId)
+                    ->whereKey($contactId)
+                    ->value('company_id');
+
+                $input['company_id'] =
+                    $contactCompanyId === null ? null : (int) $contactCompanyId;
+            }
+        }
+
         if (array_key_exists('is_active', $input)) {
             $bool = filter_var(
                 $input['is_active'],

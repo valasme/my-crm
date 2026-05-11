@@ -151,11 +151,10 @@ new #[Title("Create Company")] class extends Component {
 
                 <div class="md:col-span-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
                     <flux:heading size="lg">{{ __('Primary Contact') }}</flux:heading>
+                    <flux:text class="mt-2 text-xs">
+                        {{ __('Save the company first, then assign a primary contact from linked contacts on the edit page.') }}
+                    </flux:text>
                 </div>
-
-                <flux:input name="primary_contact_name" :label="__('Contact name (optional)')" :value="old('primary_contact_name')" />
-                <flux:input name="primary_contact_email" :label="__('Contact email (optional)')" type="email" :value="old('primary_contact_email')" />
-                <flux:input name="primary_contact_phone" :label="__('Contact phone (optional)')" :value="old('primary_contact_phone')" />
             </div>
         </flux:card>
 

@@ -766,6 +766,32 @@ test(
 );
 
 test(
+    'activity creation rejects contact selections that do not belong to selected company',
+    function () {
+        $user = User::factory()->create();
+
+        $companyA = Company::factory()->for($user)->create();
+        $companyB = Company::factory()->for($user)->create();
+
+        $contactB = Contact::factory()
+            ->for($user)
+            ->create(['company_id' => $companyB->id]);
+
+        $this->actingAs($user)
+            ->post(
+                route('activities.store'),
+                activityPayload([
+                    'company_id' => $companyA->id,
+                    'contact_id' => $contactB->id,
+                ]),
+            )
+            ->assertSessionHasErrors(['contact_id']);
+
+        expect(Activity::query()->count())->toBe(0);
+    },
+);
+
+test(
     'activity name must be unique per user but may be reused across users',
     function () {
         $user = User::factory()->create();

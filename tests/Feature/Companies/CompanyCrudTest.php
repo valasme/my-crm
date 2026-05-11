@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -26,9 +27,6 @@ function companyPayload(array $overrides = []): array
             'timezone' => 'UTC',
             'preferred_contact_method' => 'email',
             'tax_id' => '12-3456789',
-            'primary_contact_name' => 'Alex Jordan',
-            'primary_contact_email' => 'alex@example.com',
-            'primary_contact_phone' => '+1-555-0199',
             'address_line_1' => '123 Main St',
             'address_line_2' => 'Suite 400',
             'city' => 'Austin',
@@ -543,7 +541,6 @@ test('store sanitizes and normalizes incoming payload', function () {
             'status' => 'LEAD',
             'email' => '  SALES@EXAMPLE.COM ',
             'billing_email' => ' BILLING@EXAMPLE.COM ',
-            'primary_contact_email' => ' PRIMARY@EXAMPLE.COM ',
             'website' => 'example.org',
             'linkedin_url' => 'linkedin.com/company/acme',
             'preferred_contact_method' => 'EMAIL',
@@ -568,8 +565,6 @@ test('store sanitizes and normalizes incoming payload', function () {
         ->toBe('sales@example.com')
         ->and($company->billing_email)
         ->toBe('billing@example.com')
-        ->and($company->primary_contact_email)
-        ->toBe('primary@example.com')
         ->and($company->website)
         ->toBe('https://example.org')
         ->and($company->linkedin_url)
@@ -699,6 +694,28 @@ test('company creation rejects user_id injection attempts', function () {
         ->toBeFalse()
         ->and(Company::query()->count())
         ->toBe(0);
+});
+
+test('company creation rejects primary_contact_id before a company exists', function () {
+    $user = User::factory()->create();
+
+    $contact = Contact::factory()->for($user)->create();
+
+    $this->actingAs($user)
+        ->post(
+            route('companies.store'),
+            companyPayload([
+                'name' => 'Primary Contact Injection Co',
+                'primary_contact_id' => $contact->id,
+            ]),
+        )
+        ->assertSessionHasErrors(['primary_contact_id']);
+
+    expect(
+        Company::query()
+            ->where('name', 'Primary Contact Injection Co')
+            ->exists(),
+    )->toBeFalse();
 });
 
 test('company creation validates required and constrained fields', function () {
@@ -869,7 +886,6 @@ test('owners can update their companies with sanitized values', function () {
         'status' => 'CUSTOMER',
         'email' => '  AFTER@EXAMPLE.COM ',
         'billing_email' => ' BILLING+UPDATED@EXAMPLE.COM ',
-        'primary_contact_email' => ' PRIMARY+UPDATED@EXAMPLE.COM ',
         'website' => 'updated.example.com',
         'linkedin_url' => 'linkedin.com/company/after-update',
         'preferred_contact_method' => 'PHONE',
@@ -897,8 +913,6 @@ test('owners can update their companies with sanitized values', function () {
         ->toBe('after@example.com')
         ->and($company->billing_email)
         ->toBe('billing+updated@example.com')
-        ->and($company->primary_contact_email)
-        ->toBe('primary+updated@example.com')
         ->and($company->website)
         ->toBe('https://updated.example.com')
         ->and($company->linkedin_url)
@@ -916,6 +930,72 @@ test('owners can update their companies with sanitized values', function () {
         ->and($company->user_id)
         ->toBe($user->id);
 });
+
+test('owners can set a primary contact linked to the same company', function () {
+    $user = User::factory()->create();
+
+    $company = Company::factory()->for($user)->create();
+
+    $primaryContact = Contact::factory()
+        ->for($user)
+        ->create([
+            'company_id' => $company->id,
+        ]);
+
+    $response = $this->actingAs($user)->put(
+        route('companies.update', $company),
+        companyPayload([
+            'name' => $company->name,
+            'primary_contact_id' => $primaryContact->id,
+        ]),
+    );
+
+    $response->assertSessionHasNoErrors();
+
+    expect($company->fresh()?->primary_contact_id)->toBe($primaryContact->id);
+});
+
+test(
+    'company update rejects primary contacts that are not linked to the company or owner',
+    function () {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $company = Company::factory()->for($user)->create();
+
+        $otherCompany = Company::factory()->for($user)->create();
+
+        $wrongCompanyContact = Contact::factory()
+            ->for($user)
+            ->create([
+                'company_id' => $otherCompany->id,
+            ]);
+
+        $foreignContact = Contact::factory()->for($otherUser)->create();
+
+        $this->actingAs($user)
+            ->put(
+                route('companies.update', $company),
+                companyPayload([
+                    'name' => $company->name,
+                    'primary_contact_id' => $wrongCompanyContact->id,
+                ]),
+            )
+            ->assertSessionHasErrors(['primary_contact_id']);
+
+        $this->actingAs($user)
+            ->put(
+                route('companies.update', $company),
+                companyPayload([
+                    'name' => $company->name,
+                    'primary_contact_id' => $foreignContact->id,
+                ]),
+            )
+            ->assertSessionHasErrors(['primary_contact_id']);
+
+        expect($company->fresh()?->primary_contact_id)->toBeNull();
+    },
+);
 
 test(
     'update validates uniqueness while allowing unchanged names and cross-user reuse',

@@ -41,6 +41,23 @@ new #[Title("Edit Company")] class extends Component {
     {
         return Company::preferredContactMethods();
     }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function primaryContacts(): array
+    {
+        return $this->company
+            ->contacts()
+            ->select(["id", "name"])
+            ->orderBy("name")
+            ->pluck("name", "id")
+            ->mapWithKeys(
+                fn(string $name, int $id): array => [(string) $id => $name],
+            )
+            ->all();
+    }
 };
 ?>
 
@@ -219,22 +236,34 @@ new #[Title("Edit Company")] class extends Component {
                     <flux:heading size="lg">{{ __('Primary Contact') }}</flux:heading>
                 </div>
 
-                <flux:input
-                    name="primary_contact_name"
-                    :label="__('Contact name (optional)')"
-                    :value="old('primary_contact_name', $company->primary_contact_name)"
-                />
-                <flux:input
-                    name="primary_contact_email"
-                    :label="__('Contact email (optional)')"
-                    type="email"
-                    :value="old('primary_contact_email', $company->primary_contact_email)"
-                />
-                <flux:input
-                    name="primary_contact_phone"
-                    :label="__('Contact phone (optional)')"
-                    :value="old('primary_contact_phone', $company->primary_contact_phone)"
-                />
+                <div class="md:col-span-2">
+                    <label for="primary_contact_id" class="mb-1 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {{ __('Primary contact (optional)') }}
+                    </label>
+                    <select
+                        id="primary_contact_id"
+                        name="primary_contact_id"
+                        class="block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500 dark:focus:ring-zinc-700"
+                    >
+                        <option value="">{{ __('No primary contact selected') }}</option>
+                        @foreach ($this->primaryContacts as $contactId => $contactName)
+                            <option
+                                value="{{ $contactId }}"
+                                @selected((string) old('primary_contact_id', (string) $company->primary_contact_id) === $contactId)
+                            >
+                                {{ $contactName }}
+                            </option>
+                        @endforeach
+                    </select>
+                    @error('primary_contact_id')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                    @if (empty($this->primaryContacts))
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ __('Add contacts linked to this company before setting a primary contact.') }}
+                        </p>
+                    @endif
+                </div>
             </div>
         </flux:card>
 

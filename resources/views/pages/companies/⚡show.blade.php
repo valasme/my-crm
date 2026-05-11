@@ -21,7 +21,20 @@ new #[Title("Company Details")] class extends Component {
             abort(404);
         }
 
-        $this->company = $company;
+        $this->company = $company->loadMissing([
+            "primaryContact" => fn($contactQuery) => $contactQuery
+                ->select([
+                    "id",
+                    "name",
+                    "email",
+                    "phone",
+                    "mobile_phone",
+                    "user_id",
+                    "company_id",
+                ])
+                ->where("user_id", Auth::id())
+                ->where("company_id", $company->id),
+        ]);
 
         Gate::authorize("view", $this->company);
     }
@@ -42,7 +55,6 @@ new #[Title("Company Details")] class extends Component {
                 "type",
                 "status",
                 "activity_at",
-                "next_follow_up_at",
             ])
             ->orderByDesc("activity_at")
             ->orderByDesc("id")
@@ -245,15 +257,23 @@ new #[Title("Company Details")] class extends Component {
 
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Name') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_name ?: '—' }}</flux:text>
+                    <flux:text>
+                        @if ($company->primaryContact)
+                            <a href="{{ route('contacts.show', $company->primaryContact) }}" wire:navigate class="underline">
+                                {{ $company->primaryContact->name }}
+                            </a>
+                        @else
+                            —
+                        @endif
+                    </flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Email') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_email ?: '—' }}</flux:text>
+                    <flux:text>{{ $company->primaryContact?->email ?: '—' }}</flux:text>
                 </div>
                 <div class="grid gap-1 sm:grid-cols-[160px_1fr] sm:gap-3">
                     <flux:text>{{ __('Phone') }}</flux:text>
-                    <flux:text>{{ $company->primary_contact_phone ?: '—' }}</flux:text>
+                    <flux:text>{{ $company->primaryContact?->phone ?: ($company->primaryContact?->mobile_phone ?: '—') }}</flux:text>
                 </div>
             </div>
         </flux:card>
@@ -304,8 +324,6 @@ new #[Title("Company Details")] class extends Component {
                         {{ __('Date: :date', ['date' => $timelineItem->activity_at?->format('M d, Y') ?: '—']) }}
                         ·
                         {{ __('Contact: :contact', ['contact' => $timelineItem->contact?->name ?: '—']) }}
-                        ·
-                        {{ __('Next follow-up: :date', ['date' => $timelineItem->next_follow_up_at?->format('M d, Y') ?: '—']) }}
                     </div>
                 </div>
             @empty
