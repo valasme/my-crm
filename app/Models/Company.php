@@ -158,4 +158,14 @@ class Company extends Model
     {
         return $this->hasMany(Task::class);
     }
+
+    /**
+     * Get deals associated with the company.
+     *
+     * @return HasMany<Deal>
+     */
+    public function deals(): HasMany
+    {
+        return $this->hasMany(Deal::class);
+    }
 }

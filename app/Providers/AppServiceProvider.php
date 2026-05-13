@@ -7,10 +7,12 @@ use App\Actions\Crm\TaskTimelineObserver;
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\Deal;
 use App\Models\Task;
 use App\Policies\ActivityPolicy;
 use App\Policies\CompanyPolicy;
 use App\Policies\ContactPolicy;
+use App\Policies\DealPolicy;
 use App\Policies\TaskPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -41,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Contact::class, ContactPolicy::class);
         Gate::policy(Activity::class, ActivityPolicy::class);
         Gate::policy(Task::class, TaskPolicy::class);
+        Gate::policy(Deal::class, DealPolicy::class);
 
         Activity::observe(ActivityTimelineObserver::class);
         Task::observe(TaskTimelineObserver::class);
@@ -120,6 +123,18 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('tasks-write', function (Request $request): Limit {
+            return Limit::perMinute(60)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('deals-read', function (Request $request): Limit {
+            return Limit::perMinute(180)->by(
+                $request->user()?->id ?: $request->ip(),
+            );
+        });
+
+        RateLimiter::for('deals-write', function (Request $request): Limit {
             return Limit::perMinute(60)->by(
                 $request->user()?->id ?: $request->ip(),
             );

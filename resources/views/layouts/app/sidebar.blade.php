@@ -30,6 +30,10 @@
                     <flux:sidebar.item icon="clipboard-document-list" :href="route('tasks.index')" :current="request()->routeIs('tasks.*')" wire:navigate>
                         {{ __('Tasks') }}
                     </flux:sidebar.item>
+
+                    <flux:sidebar.item icon="banknotes" :href="route('deals.index')" :current="request()->routeIs('deals.*')" wire:navigate>
+                        {{ __('Deals') }}
+                    </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 

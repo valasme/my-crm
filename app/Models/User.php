@@ -73,6 +73,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the deals owned by the user.
+     */
+    public function deals(): HasMany
+    {
+        return $this->hasMany(Deal::class);
+    }
+
+    /**
      * Get the user's initials
      */
     public function initials(): string

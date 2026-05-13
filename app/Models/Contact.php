@@ -140,4 +140,14 @@ class Contact extends Model
     {
         return $this->hasMany(Task::class);
     }
+
+    /**
+     * Get deals associated with the contact.
+     *
+     * @return HasMany<Deal>
+     */
+    public function deals(): HasMany
+    {
+        return $this->hasMany(Deal::class);
+    }
 }

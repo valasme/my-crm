@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\DealController;
 use App\Http\Controllers\TaskController;
 use Illuminate\Support\Facades\Route;
 
@@ -104,6 +105,29 @@ Route::middleware(['auth'])->group(function () {
         ->only(['store', 'update', 'destroy'])
         ->whereNumber('task')
         ->middleware('throttle:tasks-write');
+
+    Route::livewire('deals', 'pages::deals.index')
+        ->name('deals.index')
+        ->middleware('throttle:deals-read');
+
+    Route::livewire('deals/create', 'pages::deals.create')
+        ->name('deals.create')
+        ->middleware('throttle:deals-read');
+
+    Route::livewire('deals/{deal}/edit', 'pages::deals.edit')
+        ->name('deals.edit')
+        ->whereNumber('deal')
+        ->middleware('throttle:deals-read');
+
+    Route::livewire('deals/{deal}', 'pages::deals.show')
+        ->name('deals.show')
+        ->whereNumber('deal')
+        ->middleware('throttle:deals-read');
+
+    Route::resource('deals', DealController::class)
+        ->only(['store', 'update', 'destroy'])
+        ->whereNumber('deal')
+        ->middleware('throttle:deals-write');
 });
 
 require __DIR__.'/settings.php';
