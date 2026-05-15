@@ -1,28 +1,25 @@
 <?php
 
-namespace App\Actions\Crm;
+namespace App\Jobs;
 
-use Illuminate\Bus\Queueable;
+use App\Actions\SyncRelationshipTimeline;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Backoff;
+use Illuminate\Queue\Attributes\Tries;
+use Illuminate\Queue\Attributes\UniqueFor;
 
+#[Tries(5)]
+#[Backoff([1, 5, 10])]
+#[UniqueFor(8)]
 class SyncRelationshipTimelineJob implements ShouldBeUnique, ShouldQueue
 {
-    use Dispatchable;
-    use InteractsWithQueue;
     use Queueable;
-    use SerializesModels;
-
-    public int $uniqueFor = 8;
-
-    public int $tries = 5;
 
     /**
-     * @param  array<int, int|string|null>  $companyIds
-     * @param  array<int, int|string|null>  $contactIds
+     * @param  array<int, int>  $companyIds
+     * @param  array<int, int>  $contactIds
      */
     public function __construct(
         public int $userId,
@@ -45,9 +42,8 @@ class SyncRelationshipTimelineJob implements ShouldBeUnique, ShouldQueue
         );
     }
 
-    public function handle(
-        SyncRelationshipTimeline $syncRelationshipTimeline,
-    ): void {
+    public function handle(SyncRelationshipTimeline $syncRelationshipTimeline): void
+    {
         foreach ($this->companyIds as $companyId) {
             $syncRelationshipTimeline->syncCompany(
                 userId: $this->userId,
@@ -61,14 +57,6 @@ class SyncRelationshipTimelineJob implements ShouldBeUnique, ShouldQueue
                 contactId: $contactId,
             );
         }
-    }
-
-    /**
-     * @return array<int, int>
-     */
-    public function backoff(): array
-    {
-        return [1, 5, 10];
     }
 
     /**

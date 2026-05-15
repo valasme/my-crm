@@ -1,7 +1,9 @@
 <?php
 
-namespace App\Actions\Crm;
+namespace App\Observers;
 
+use App\Actions\SyncRelationshipTimeline;
+use App\Jobs\SyncRelationshipTimelineJob;
 use App\Models\Task;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Testing\Fakes\QueueFake;

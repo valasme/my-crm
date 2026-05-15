@@ -2,8 +2,6 @@
 
 namespace App\Providers;
 
-use App\Actions\Crm\ActivityTimelineObserver;
-use App\Actions\Crm\TaskTimelineObserver;
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
@@ -44,9 +42,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Activity::class, ActivityPolicy::class);
         Gate::policy(Task::class, TaskPolicy::class);
         Gate::policy(Deal::class, DealPolicy::class);
-
-        Activity::observe(ActivityTimelineObserver::class);
-        Task::observe(TaskTimelineObserver::class);
 
         $this->configureDefaults();
         $this->configureRateLimiting();

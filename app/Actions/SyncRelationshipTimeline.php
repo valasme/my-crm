@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Actions\Crm;
+namespace App\Actions;
 
 use App\Models\Activity;
 use App\Models\Company;
@@ -89,10 +89,8 @@ class SyncRelationshipTimeline
             ]);
     }
 
-    private function latestDate(
-        ?string $firstDate,
-        ?string $secondDate,
-    ): ?string {
+    private function latestDate(?string $firstDate, ?string $secondDate): ?string
+    {
         if ($firstDate === null) {
             return $secondDate;
         }

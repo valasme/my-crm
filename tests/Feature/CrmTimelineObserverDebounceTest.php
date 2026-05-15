@@ -1,6 +1,6 @@
 <?php
 
-use App\Actions\Crm\SyncRelationshipTimelineJob;
+use App\Jobs\SyncRelationshipTimelineJob;
 use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
