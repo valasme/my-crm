@@ -21,19 +21,21 @@ class SyncRelationshipTimeline
             ->where('status', 'completed')
             ->max('activity_at');
 
-        $latestCompletedTaskAt = Task::query()
+        $taskSnapshot = Task::query()
             ->where('user_id', $userId)
             ->where('company_id', $companyId)
-            ->where('status', 'completed')
-            ->max('task_at');
+            ->selectRaw(
+                'max(case when status = ? then task_at end) as latest_completed_task_at',
+                ['completed'],
+            )
+            ->selectRaw(
+                'min(case when status = ? and is_active = ? and next_follow_up_at is not null then next_follow_up_at end) as earliest_planned_follow_up_at',
+                ['planned', true],
+            )
+            ->first();
 
-        $nextFollowUpAt = Task::query()
-            ->where('user_id', $userId)
-            ->where('company_id', $companyId)
-            ->where('status', 'planned')
-            ->where('is_active', true)
-            ->whereNotNull('next_follow_up_at')
-            ->min('next_follow_up_at');
+        $latestCompletedTaskAt = $taskSnapshot?->latest_completed_task_at;
+        $nextFollowUpAt = $taskSnapshot?->earliest_planned_follow_up_at;
 
         Company::query()
             ->where('user_id', $userId)
@@ -59,19 +61,21 @@ class SyncRelationshipTimeline
             ->where('status', 'completed')
             ->max('activity_at');
 
-        $latestCompletedTaskAt = Task::query()
+        $taskSnapshot = Task::query()
             ->where('user_id', $userId)
             ->where('contact_id', $contactId)
-            ->where('status', 'completed')
-            ->max('task_at');
+            ->selectRaw(
+                'max(case when status = ? then task_at end) as latest_completed_task_at',
+                ['completed'],
+            )
+            ->selectRaw(
+                'min(case when status = ? and is_active = ? and next_follow_up_at is not null then next_follow_up_at end) as earliest_planned_follow_up_at',
+                ['planned', true],
+            )
+            ->first();
 
-        $nextFollowUpAt = Task::query()
-            ->where('user_id', $userId)
-            ->where('contact_id', $contactId)
-            ->where('status', 'planned')
-            ->where('is_active', true)
-            ->whereNotNull('next_follow_up_at')
-            ->min('next_follow_up_at');
+        $latestCompletedTaskAt = $taskSnapshot?->latest_completed_task_at;
+        $nextFollowUpAt = $taskSnapshot?->earliest_planned_follow_up_at;
 
         Contact::query()
             ->where('user_id', $userId)
@@ -85,8 +89,10 @@ class SyncRelationshipTimeline
             ]);
     }
 
-    private function latestDate(?string $firstDate, ?string $secondDate): ?string
-    {
+    private function latestDate(
+        ?string $firstDate,
+        ?string $secondDate,
+    ): ?string {
         if ($firstDate === null) {
             return $secondDate;
         }

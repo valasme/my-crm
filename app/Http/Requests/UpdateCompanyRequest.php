@@ -24,7 +24,30 @@ class UpdateCompanyRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        $routeCompany = $this->route('company');
+
+        $companyId =
+            $routeCompany instanceof Company
+                ? $routeCompany->id
+                : (int) $routeCompany;
+
+        if ($companyId < 1) {
+            return false;
+        }
+
+        $company = Company::query()->whereKey($companyId)->first();
+
+        if ($company === null) {
+            return false;
+        }
+
+        return $user->can('update', $company);
     }
 
     /**

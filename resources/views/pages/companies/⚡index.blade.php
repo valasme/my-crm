@@ -3,8 +3,11 @@
 use App\Models\Company;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -107,7 +110,7 @@ new #[Title("Companies")] class extends Component {
             ->take(6)
             ->values();
 
-        $today = now()->toDateString();
+        $tomorrow = now()->addDay()->toDateString();
 
         $companies = $user
             ->companies()
@@ -117,33 +120,36 @@ new #[Title("Companies")] class extends Component {
                     ->where("user_id", $user->id),
             ])
             ->select([
-                "id",
-                "primary_contact_id",
-                "name",
-                "industry",
-                "status",
-                "is_active",
-                "preferred_contact_method",
-                "next_follow_up_at",
-                "updated_at",
+                "companies.id",
+                "companies.primary_contact_id",
+                "companies.name",
+                "companies.industry",
+                "companies.status",
+                "companies.is_active",
+                "companies.preferred_contact_method",
+                "companies.next_follow_up_at",
+                "companies.updated_at",
             ])
             ->when($this->status !== "all", function (Builder $query): void {
-                $query->where("status", $this->status);
+                $query->where("companies.status", $this->status);
             })
             ->when($this->active !== "all", function (Builder $query): void {
-                $query->where("is_active", $this->active === "active");
+                $query->where(
+                    "companies.is_active",
+                    $this->active === "active",
+                );
             })
             ->when($this->followUp !== "all", function (Builder $query) use (
-                $today,
+                $tomorrow,
             ): void {
                 match ($this->followUp) {
                     "due" => $query
-                        ->whereNotNull("next_follow_up_at")
-                        ->whereDate("next_follow_up_at", "<=", $today),
+                        ->whereNotNull("companies.next_follow_up_at")
+                        ->where("companies.next_follow_up_at", "<", $tomorrow),
                     "upcoming" => $query
-                        ->whereNotNull("next_follow_up_at")
-                        ->whereDate("next_follow_up_at", ">", $today),
-                    "none" => $query->whereNull("next_follow_up_at"),
+                        ->whereNotNull("companies.next_follow_up_at")
+                        ->where("companies.next_follow_up_at", ">=", $tomorrow),
+                    "none" => $query->whereNull("companies.next_follow_up_at"),
                     default => null,
                 };
             })
@@ -151,54 +157,25 @@ new #[Title("Companies")] class extends Component {
                 $searchTerms,
                 $user,
             ): void {
-                foreach ($searchTerms as $term) {
-                    $escapedTerm = addcslashes($term, "%_\\");
-                    $likeTerm = "%{$escapedTerm}%";
-
-                    $query->where(function (Builder $innerQuery) use (
-                        $likeTerm,
-                        $user,
-                    ): void {
-                        $innerQuery
-                            ->where("name", "like", $likeTerm)
-                            ->orWhere("legal_name", "like", $likeTerm)
-                            ->orWhere("industry", "like", $likeTerm)
-                            ->orWhere("source", "like", $likeTerm)
-                            ->orWhereHas(
-                                "primaryContact",
-                                fn(
-                                    Builder $contactQuery,
-                                ): Builder => $contactQuery
-                                    ->where("user_id", $user->id)
-                                    ->where(function (
-                                        Builder $scopedContactQuery,
-                                    ) use ($likeTerm): void {
-                                        $scopedContactQuery
-                                            ->where("name", "like", $likeTerm)
-                                            ->orWhere("email", "like", $likeTerm);
-                                    }),
-                            )
-                            ->orWhere("email", "like", $likeTerm)
-                            ->orWhere("phone", "like", $likeTerm)
-                            ->orWhere("status", "like", $likeTerm)
-                            ->orWhere("city", "like", $likeTerm)
-                            ->orWhere("country", "like", $likeTerm);
-                    });
-                }
+                $this->applySearchToCompanyQuery(
+                    query: $query,
+                    searchTerms: $searchTerms,
+                    user: $user,
+                );
             });
 
         if ($this->sort === "next_follow_up_at") {
             $companies
                 ->orderByRaw(
-                    "case when next_follow_up_at is null then 1 else 0 end",
+                    "case when companies.next_follow_up_at is null then 1 else 0 end",
                 )
-                ->orderBy("next_follow_up_at", $this->direction);
+                ->orderBy("companies.next_follow_up_at", $this->direction);
         } else {
-            $companies->orderBy($this->sort, $this->direction);
+            $companies->orderBy("companies." . $this->sort, $this->direction);
         }
 
         return $companies
-            ->orderByDesc("id")
+            ->orderByDesc("companies.id")
             ->paginate($this->perPage)
             ->withQueryString();
     }
@@ -300,6 +277,107 @@ new #[Title("Companies")] class extends Component {
     public function directionLabel(): string
     {
         return $this->direction === "asc" ? __("Ascending") : __("Descending");
+    }
+
+    /**
+     * Apply search constraints to the companies query.
+     *
+     * @param Collection<int, string> $searchTerms
+     */
+    private function applySearchToCompanyQuery(
+        Builder $query,
+        Collection $searchTerms,
+        User $user,
+    ): void {
+        $query->leftJoin("contacts as primary_contacts", function (
+            JoinClause $join,
+        ) use ($user): void {
+            $join
+                ->on("primary_contacts.id", "=", "companies.primary_contact_id")
+                ->where("primary_contacts.user_id", "=", $user->id);
+        });
+
+        if ($this->supportsFullTextSearch()) {
+            $booleanQuery = $this->buildFullTextBooleanQuery($searchTerms);
+
+            if ($booleanQuery !== null) {
+                $query->where(function (Builder $innerQuery) use (
+                    $booleanQuery,
+                ): void {
+                    $innerQuery
+                        ->whereRaw(
+                            "MATCH (companies.name, companies.legal_name, companies.industry, companies.source, companies.email, companies.phone, companies.status, companies.city, companies.country) AGAINST (? IN BOOLEAN MODE)",
+                            [$booleanQuery],
+                        )
+                        ->orWhereRaw(
+                            "MATCH (primary_contacts.name, primary_contacts.email) AGAINST (? IN BOOLEAN MODE)",
+                            [$booleanQuery],
+                        );
+                });
+
+                return;
+            }
+        }
+
+        foreach ($searchTerms as $term) {
+            $escapedTerm = addcslashes($term, "%_\\");
+            $likeTerm = "%{$escapedTerm}%";
+
+            $query->where(function (Builder $innerQuery) use ($likeTerm): void {
+                $innerQuery
+                    ->where("companies.name", "like", $likeTerm)
+                    ->orWhere("companies.legal_name", "like", $likeTerm)
+                    ->orWhere("companies.industry", "like", $likeTerm)
+                    ->orWhere("companies.source", "like", $likeTerm)
+                    ->orWhere("primary_contacts.name", "like", $likeTerm)
+                    ->orWhere("primary_contacts.email", "like", $likeTerm)
+                    ->orWhere("companies.email", "like", $likeTerm)
+                    ->orWhere("companies.phone", "like", $likeTerm)
+                    ->orWhere("companies.status", "like", $likeTerm)
+                    ->orWhere("companies.city", "like", $likeTerm)
+                    ->orWhere("companies.country", "like", $likeTerm);
+            });
+        }
+    }
+
+    private function supportsFullTextSearch(): bool
+    {
+        return in_array(
+            DB::connection()->getDriverName(),
+            ["mysql", "mariadb"],
+            true,
+        );
+    }
+
+    /**
+     * @param Collection<int, string> $searchTerms
+     */
+    private function buildFullTextBooleanQuery(Collection $searchTerms): ?string
+    {
+        $normalizedTerms = $searchTerms
+            ->map(function (string $term): string {
+                $sanitized = preg_replace("/[^\\pL\\pN@._-]+/u", "", $term);
+
+                return mb_strtolower((string) $sanitized);
+            })
+            ->filter(fn(string $term): bool => $term !== "")
+            ->values();
+
+        if ($normalizedTerms->isEmpty()) {
+            return null;
+        }
+
+        if (
+            $normalizedTerms->contains(
+                fn(string $term): bool => mb_strlen($term) < 3,
+            )
+        ) {
+            return null;
+        }
+
+        return $normalizedTerms
+            ->map(fn(string $term): string => "+{$term}*")
+            ->implode(" ");
     }
 
     /**

@@ -193,6 +193,67 @@ test(
 );
 
 test(
+    'index search can match primary contact name and email without cross-user leakage',
+    function () {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $matching = Company::factory()
+            ->for($user)
+            ->create(['name' => 'Zenith Labs']);
+
+        $primaryContact = Contact::factory()
+            ->for($user)
+            ->create([
+                'company_id' => $matching->id,
+                'name' => 'Priya SearchToken',
+                'email' => 'priya.searchtoken@example.test',
+            ]);
+
+        $matching->update(['primary_contact_id' => $primaryContact->id]);
+
+        Contact::factory()
+            ->for($user)
+            ->create([
+                'company_id' => $matching->id,
+                'name' => 'Secondary SearchToken',
+                'email' => 'secondary.searchtoken@example.test',
+            ]);
+
+        $hidden = Company::factory()
+            ->for($otherUser)
+            ->create(['name' => 'Zenith Hidden']);
+
+        $hiddenPrimaryContact = Contact::factory()
+            ->for($otherUser)
+            ->create([
+                'company_id' => $hidden->id,
+                'name' => 'Priya SearchToken',
+                'email' => 'priya.searchtoken@example.test',
+            ]);
+
+        $hidden->update(['primary_contact_id' => $hiddenPrimaryContact->id]);
+
+        $response = $this->actingAs($user)->get(
+            route('companies.index', [
+                'search' => 'Priya SearchToken example.test',
+            ]),
+        );
+
+        $response
+            ->assertOk()
+            ->assertSee('Zenith Labs')
+            ->assertDontSee('Zenith Hidden');
+
+        $secondaryResponse = $this->actingAs($user)->get(
+            route('companies.index', ['search' => 'Secondary SearchToken']),
+        );
+
+        $secondaryResponse->assertOk()->assertDontSee('Zenith Labs');
+    },
+);
+
+test(
     'index search requires all terms and ignores terms after the sixth',
     function () {
         $user = User::factory()->create();
@@ -1082,7 +1143,7 @@ test('non-owners cannot update another users company', function () {
                 'name' => 'Hacked Co',
             ]),
         )
-        ->assertNotFound();
+        ->assertForbidden();
 
     expect($company->fresh()->name)->toBe('Protected Co');
 });

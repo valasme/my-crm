@@ -3,17 +3,22 @@
 namespace App\Actions\Crm;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
-class SyncRelationshipTimelineJob implements ShouldQueue
+class SyncRelationshipTimelineJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
     use SerializesModels;
+
+    public int $uniqueFor = 8;
+
+    public int $tries = 5;
 
     /**
      * @param  array<int, int|string|null>  $companyIds
@@ -28,6 +33,16 @@ class SyncRelationshipTimelineJob implements ShouldQueue
 
         $this->companyIds = $this->normalizeIds($companyIds);
         $this->contactIds = $this->normalizeIds($contactIds);
+    }
+
+    public function uniqueId(): string
+    {
+        return sprintf(
+            'crm:timeline-sync:%d:%s:%s',
+            $this->userId,
+            implode(',', $this->companyIds),
+            implode(',', $this->contactIds),
+        );
     }
 
     public function handle(
@@ -49,6 +64,14 @@ class SyncRelationshipTimelineJob implements ShouldQueue
     }
 
     /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [1, 5, 10];
+    }
+
+    /**
      * @param  array<int, int|string|null>  $ids
      * @return array<int, int>
      */
@@ -58,6 +81,7 @@ class SyncRelationshipTimelineJob implements ShouldQueue
             ->filter(fn (mixed $id): bool => is_numeric($id) && (int) $id > 0)
             ->map(fn (mixed $id): int => (int) $id)
             ->unique()
+            ->sort()
             ->values()
             ->all();
     }
