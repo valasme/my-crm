@@ -81,3 +81,10 @@ select:focus[data-flux-control] {
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */
+
+/* Remove flux:modal open/close animations */
+[data-flux-modal] > dialog,
+[data-flux-modal] > dialog::backdrop {
+    transition: none !important;
+    animation: none !important;
+}

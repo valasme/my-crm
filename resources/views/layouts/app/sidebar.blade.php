@@ -12,6 +12,12 @@
 
             <flux:sidebar.nav>
                 <flux:sidebar.group :heading="__('Platform')" class="grid">
+                    <flux:modal.trigger name="global-search-modal" shortcut="cmd.k">
+                        <flux:sidebar.item icon="magnifying-glass">
+                            {{ __('Global Search') }}
+                        </flux:sidebar.item>
+                    </flux:modal.trigger>
+
                     <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
@@ -36,6 +42,8 @@
                     </flux:sidebar.item>
                 </flux:sidebar.group>
             </flux:sidebar.nav>
+
+            <livewire:global-search-modal />
 
             <flux:spacer />
 
