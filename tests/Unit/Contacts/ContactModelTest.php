@@ -1,7 +1,10 @@
 <?php
 
+use App\Models\Activity;
 use App\Models\Company;
 use App\Models\Contact;
+use App\Models\Deal;
+use App\Models\Task;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -177,4 +180,61 @@ test('contact helper methods mirror model constants', function () {
         ->toBe(Contact::PREFERRED_CONTACT_METHODS)
         ->and(Contact::preferredContactMethods())
         ->toBe(['email', 'phone', 'linkedin', 'any']);
+});
+
+test('contact has many activities', function () {
+    $user = User::factory()->create();
+    $contact = Contact::factory()->for($user)->create();
+    $otherContact = Contact::factory()->for($user)->create();
+
+    Activity::factory()
+        ->count(3)
+        ->for($user)
+        ->create(['contact_id' => $contact->id]);
+    Activity::factory()
+        ->for($user)
+        ->create(['contact_id' => $otherContact->id]);
+
+    expect($contact->activities()->count())
+        ->toBe(3)
+        ->and($contact->activities()->pluck('contact_id')->unique()->all())
+        ->toBe([$contact->id]);
+});
+
+test('contact has many tasks', function () {
+    $user = User::factory()->create();
+    $contact = Contact::factory()->for($user)->create();
+    $otherContact = Contact::factory()->for($user)->create();
+
+    Task::factory()
+        ->count(2)
+        ->for($user)
+        ->create(['contact_id' => $contact->id]);
+    Task::factory()
+        ->for($user)
+        ->create(['contact_id' => $otherContact->id]);
+
+    expect($contact->tasks()->count())
+        ->toBe(2)
+        ->and($contact->tasks()->pluck('contact_id')->unique()->all())
+        ->toBe([$contact->id]);
+});
+
+test('contact has many deals', function () {
+    $user = User::factory()->create();
+    $contact = Contact::factory()->for($user)->create();
+    $otherContact = Contact::factory()->for($user)->create();
+
+    Deal::factory()
+        ->count(2)
+        ->for($user)
+        ->create(['contact_id' => $contact->id]);
+    Deal::factory()
+        ->for($user)
+        ->create(['contact_id' => $otherContact->id]);
+
+    expect($contact->deals()->count())
+        ->toBe(2)
+        ->and($contact->deals()->pluck('contact_id')->unique()->all())
+        ->toBe([$contact->id]);
 });

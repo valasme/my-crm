@@ -48,7 +48,9 @@ class ContactFactory extends Factory
             'alternate_email' => fake()->optional()->safeEmail(),
             'phone' => fake()->optional()->phoneNumber(),
             'mobile_phone' => fake()->optional()->phoneNumber(),
-            'linkedin_url' => fake()->optional()->url(),
+            'linkedin_url' => fake()->boolean(60)
+                ? 'https://linkedin.com/in/'.fake()->slug(2)
+                : null,
             'timezone' => fake()->optional()->timezone(),
             'preferred_contact_method' => fake()
                 ->optional()

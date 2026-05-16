@@ -175,11 +175,9 @@ new #[Title("Contacts")] class extends Component {
                             ->orWhere("status", "like", $likeTerm)
                             ->orWhere("city", "like", $likeTerm)
                             ->orWhere("country", "like", $likeTerm)
-                            ->orWhereHas(
-                                "company",
-                                fn(
-                                    Builder $companyQuery,
-                                ): Builder => $companyQuery->where(
+                            ->orWhereIn(
+                                "company_id",
+                                Company::select("id")->where(
                                     "name",
                                     "like",
                                     $likeTerm,
