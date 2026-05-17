@@ -4,12 +4,21 @@ use App\Models\Deal;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title("Edit Deal")] class extends Component {
+    private const RELATION_OPTIONS_LIMIT = 75;
+
     public Deal $deal;
+
+    public string $companySearch = "";
+
+    public string $contactSearch = "";
+
+    public string $activitySearch = "";
 
     /**
      * Mount the component.
@@ -23,6 +32,21 @@ new #[Title("Edit Deal")] class extends Component {
         $this->deal = $deal;
 
         Gate::authorize("update", $this->deal);
+    }
+
+    public function updatedCompanySearch(string $value): void
+    {
+        $this->companySearch = $this->sanitizeRelationSearch($value);
+    }
+
+    public function updatedContactSearch(string $value): void
+    {
+        $this->contactSearch = $this->sanitizeRelationSearch($value);
+    }
+
+    public function updatedActivitySearch(string $value): void
+    {
+        $this->activitySearch = $this->sanitizeRelationSearch($value);
     }
 
     /**
@@ -61,15 +85,29 @@ new #[Title("Edit Deal")] class extends Component {
         /** @var User $user */
         $user = Auth::user();
 
-        return $user
-            ->companies()
-            ->select(["id", "name"])
+        $search = $this->sanitizeRelationSearch($this->companySearch);
+
+        $companiesQuery = $user->companies()->select(["id", "name"]);
+
+        if ($search !== "") {
+            $escapedSearch = addcslashes($search, "%_\\");
+            $companiesQuery->where("name", "like", "%{$escapedSearch}%");
+        }
+
+        $options = $companiesQuery
             ->orderBy("name")
+            ->limit(self::RELATION_OPTIONS_LIMIT)
             ->pluck("name", "id")
             ->mapWithKeys(
                 fn(string $name, int $id): array => [(string) $id => $name],
             )
             ->all();
+
+        return $this->prependSelectedOption(
+            options: $options,
+            selectedId: $this->selectedCompanyId(),
+            relationQuery: $user->companies()->select(["id", "name"]),
+        );
     }
 
     /**
@@ -81,15 +119,29 @@ new #[Title("Edit Deal")] class extends Component {
         /** @var User $user */
         $user = Auth::user();
 
-        return $user
-            ->contacts()
-            ->select(["id", "name"])
+        $search = $this->sanitizeRelationSearch($this->contactSearch);
+
+        $contactsQuery = $user->contacts()->select(["id", "name"]);
+
+        if ($search !== "") {
+            $escapedSearch = addcslashes($search, "%_\\");
+            $contactsQuery->where("name", "like", "%{$escapedSearch}%");
+        }
+
+        $options = $contactsQuery
             ->orderBy("name")
+            ->limit(self::RELATION_OPTIONS_LIMIT)
             ->pluck("name", "id")
             ->mapWithKeys(
                 fn(string $name, int $id): array => [(string) $id => $name],
             )
             ->all();
+
+        return $this->prependSelectedOption(
+            options: $options,
+            selectedId: $this->selectedContactId(),
+            relationQuery: $user->contacts()->select(["id", "name"]),
+        );
     }
 
     /**
@@ -101,16 +153,95 @@ new #[Title("Edit Deal")] class extends Component {
         /** @var User $user */
         $user = Auth::user();
 
-        return $user
-            ->activities()
-            ->select(["id", "name"])
+        $search = $this->sanitizeRelationSearch($this->activitySearch);
+
+        $activitiesQuery = $user->activities()->select(["id", "name"]);
+
+        if ($search !== "") {
+            $escapedSearch = addcslashes($search, "%_\\");
+            $activitiesQuery->where("name", "like", "%{$escapedSearch}%");
+        }
+
+        $options = $activitiesQuery
             ->orderByDesc("activity_at")
             ->orderByDesc("id")
+            ->limit(self::RELATION_OPTIONS_LIMIT)
             ->pluck("name", "id")
             ->mapWithKeys(
                 fn(string $name, int $id): array => [(string) $id => $name],
             )
             ->all();
+
+        return $this->prependSelectedOption(
+            options: $options,
+            selectedId: $this->selectedActivityId(),
+            relationQuery: $user->activities()->select(["id", "name"]),
+        );
+    }
+
+    private function selectedCompanyId(): ?int
+    {
+        return $this->nullablePositiveInteger(
+            old("company_id", $this->deal->company_id),
+        );
+    }
+
+    private function selectedContactId(): ?int
+    {
+        return $this->nullablePositiveInteger(
+            old("contact_id", $this->deal->contact_id),
+        );
+    }
+
+    private function selectedActivityId(): ?int
+    {
+        return $this->nullablePositiveInteger(
+            old("activity_id", $this->deal->activity_id),
+        );
+    }
+
+    /**
+     * @param array<string, string> $options
+     * @return array<string, string>
+     */
+    private function prependSelectedOption(
+        array $options,
+        ?int $selectedId,
+        \Illuminate\Database\Eloquent\Relations\Relation $relationQuery,
+    ): array {
+        if ($selectedId === null || array_key_exists((string) $selectedId, $options)) {
+            return $options;
+        }
+
+        $selectedName = $relationQuery->whereKey($selectedId)->value("name");
+
+        if (!is_string($selectedName) || $selectedName === "") {
+            return $options;
+        }
+
+        return [(string) $selectedId => $selectedName] + $options;
+    }
+
+    private function sanitizeRelationSearch(string $value): string
+    {
+        return Str::of(strip_tags($value))->squish()->limit(80, "")->toString();
+    }
+
+    private function nullablePositiveInteger(mixed $value): ?int
+    {
+        if ($value === null || $value === "") {
+            return null;
+        }
+
+        $validated = filter_var($value, FILTER_VALIDATE_INT, [
+            "options" => ["min_range" => 1],
+        ]);
+
+        if ($validated === false) {
+            return null;
+        }
+
+        return (int) $validated;
     }
 };
 ?>
@@ -180,7 +311,14 @@ new #[Title("Edit Deal")] class extends Component {
 
             <div class="grid gap-4 md:grid-cols-2">
                 <div>
-                    <label for="company_id" class="mb-1 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <flux:input
+                        wire:model.live.debounce.300ms="companySearch"
+                        :label="__('Search companies')"
+                        :placeholder="__('Type to filter company options')"
+                        type="search"
+                    />
+
+                    <label for="company_id" class="mb-1 mt-3 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {{ __('Company (optional)') }}
                     </label>
                     <select
@@ -204,7 +342,14 @@ new #[Title("Edit Deal")] class extends Component {
                 </div>
 
                 <div>
-                    <label for="contact_id" class="mb-1 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <flux:input
+                        wire:model.live.debounce.300ms="contactSearch"
+                        :label="__('Search contacts')"
+                        :placeholder="__('Type to filter contact options')"
+                        type="search"
+                    />
+
+                    <label for="contact_id" class="mb-1 mt-3 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {{ __('Contact (optional)') }}
                     </label>
                     <select
@@ -228,7 +373,14 @@ new #[Title("Edit Deal")] class extends Component {
                 </div>
 
                 <div class="md:col-span-2">
-                    <label for="activity_id" class="mb-1 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <flux:input
+                        wire:model.live.debounce.300ms="activitySearch"
+                        :label="__('Search activities')"
+                        :placeholder="__('Type to filter activity options')"
+                        type="search"
+                    />
+
+                    <label for="activity_id" class="mb-1 mt-3 block text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {{ __('Related activity (optional)') }}
                     </label>
                     <select

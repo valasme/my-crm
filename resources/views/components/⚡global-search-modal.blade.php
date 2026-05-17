@@ -7,7 +7,9 @@ use App\Models\Deal;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -310,17 +312,17 @@ new class extends Component {
     private function searchActivities(User $user, array $searchTerms): array
     {
         $query = Activity::query()
-            ->where("user_id", $user->id)
+            ->where("activities.user_id", $user->id)
             ->select([
-                "id",
-                "company_id",
-                "contact_id",
-                "name",
-                "type",
-                "status",
-                "source",
-                "activity_at",
-                "updated_at",
+                "activities.id",
+                "activities.company_id",
+                "activities.contact_id",
+                "activities.name",
+                "activities.type",
+                "activities.status",
+                "activities.source",
+                "activities.activity_at",
+                "activities.updated_at",
             ])
             ->with([
                 "company" => fn($companyQuery) => $companyQuery->select([
@@ -335,31 +337,69 @@ new class extends Component {
                 ]),
             ]);
 
-        $this->applySearchTerms($query, $searchTerms, function (
-            Builder $innerQuery,
-            string $likeTerm,
-        ): void {
-            $innerQuery
-                ->where("name", "like", $likeTerm)
-                ->orWhere("type", "like", $likeTerm)
-                ->orWhere("status", "like", $likeTerm)
-                ->orWhere("source", "like", $likeTerm)
-                ->orWhere("notes", "like", $likeTerm)
-                ->orWhereHas("company", function (Builder $companyQuery) use (
-                    $likeTerm,
-                ): void {
-                    $companyQuery->where("name", "like", $likeTerm);
-                })
-                ->orWhereHas("contact", function (Builder $contactQuery) use (
-                    $likeTerm,
-                ): void {
-                    $contactQuery->where("name", "like", $likeTerm);
-                });
-        });
+        $booleanQuery = $this->buildFullTextBooleanQuery($searchTerms);
+
+        if ($this->supportsFullTextSearch() && $booleanQuery !== null) {
+            $query->leftJoin("companies as activity_companies", function (
+                JoinClause $join,
+            ) use ($user): void {
+                $join
+                    ->on("activity_companies.id", "=", "activities.company_id")
+                    ->where("activity_companies.user_id", "=", $user->id);
+            });
+
+            $query->leftJoin("contacts as activity_contacts", function (
+                JoinClause $join,
+            ) use ($user): void {
+                $join
+                    ->on("activity_contacts.id", "=", "activities.contact_id")
+                    ->where("activity_contacts.user_id", "=", $user->id);
+            });
+
+            $query->where(function (Builder $innerQuery) use (
+                $booleanQuery,
+            ): void {
+                $innerQuery
+                    ->whereRaw(
+                        "MATCH (activities.name, activities.type, activities.status, activities.source, activities.notes) AGAINST (? IN BOOLEAN MODE)",
+                        [$booleanQuery],
+                    )
+                    ->orWhereRaw(
+                        "MATCH (activity_companies.name, activity_companies.legal_name, activity_companies.industry, activity_companies.source, activity_companies.email, activity_companies.phone, activity_companies.status, activity_companies.city, activity_companies.country) AGAINST (? IN BOOLEAN MODE)",
+                        [$booleanQuery],
+                    )
+                    ->orWhereRaw(
+                        "MATCH (activity_contacts.name, activity_contacts.email) AGAINST (? IN BOOLEAN MODE)",
+                        [$booleanQuery],
+                    );
+            });
+        } else {
+            $this->applySearchTerms($query, $searchTerms, function (
+                Builder $innerQuery,
+                string $likeTerm,
+            ): void {
+                $innerQuery
+                    ->where("activities.name", "like", $likeTerm)
+                    ->orWhere("activities.type", "like", $likeTerm)
+                    ->orWhere("activities.status", "like", $likeTerm)
+                    ->orWhere("activities.source", "like", $likeTerm)
+                    ->orWhere("activities.notes", "like", $likeTerm)
+                    ->orWhereHas("company", function (
+                        Builder $companyQuery,
+                    ) use ($likeTerm): void {
+                        $companyQuery->where("name", "like", $likeTerm);
+                    })
+                    ->orWhereHas("contact", function (
+                        Builder $contactQuery,
+                    ) use ($likeTerm): void {
+                        $contactQuery->where("name", "like", $likeTerm);
+                    });
+            });
+        }
 
         return $query
-            ->orderByDesc("updated_at")
-            ->orderByDesc("id")
+            ->orderByDesc("activities.updated_at")
+            ->orderByDesc("activities.id")
             ->limit(self::MAX_RESULTS_PER_GROUP)
             ->get()
             ->map(
@@ -565,6 +605,46 @@ new class extends Component {
                 ],
             )
             ->all();
+    }
+
+    private function supportsFullTextSearch(): bool
+    {
+        return in_array(
+            DB::connection()->getDriverName(),
+            ["mysql", "mariadb"],
+            true,
+        );
+    }
+
+    /**
+     * @param array<int, string> $searchTerms
+     */
+    private function buildFullTextBooleanQuery(array $searchTerms): ?string
+    {
+        $normalizedTerms = collect($searchTerms)
+            ->map(function (string $term): string {
+                $sanitized = preg_replace("/[^\\pL\\pN@._-]+/u", "", $term);
+
+                return mb_strtolower((string) $sanitized);
+            })
+            ->filter(fn(string $term): bool => $term !== "")
+            ->values();
+
+        if ($normalizedTerms->isEmpty()) {
+            return null;
+        }
+
+        if (
+            $normalizedTerms->contains(
+                fn(string $term): bool => mb_strlen($term) < 3,
+            )
+        ) {
+            return null;
+        }
+
+        return $normalizedTerms
+            ->map(fn(string $term): string => "+{$term}*")
+            ->implode(" ");
     }
 
     /**

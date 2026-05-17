@@ -5,8 +5,11 @@ use App\Models\Company;
 use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
@@ -108,72 +111,43 @@ new #[Title("Activities")] class extends Component {
             ->activities()
             ->with(["company:id,name,user_id", "contact:id,name,user_id"])
             ->select([
-                "id",
-                "company_id",
-                "contact_id",
-                "name",
-                "type",
-                "status",
-                "source",
-                "activity_at",
-                "updated_at",
+                "activities.id",
+                "activities.company_id",
+                "activities.contact_id",
+                "activities.name",
+                "activities.type",
+                "activities.status",
+                "activities.source",
+                "activities.activity_at",
+                "activities.updated_at",
             ])
             ->when($this->status !== "all", function (Builder $query): void {
-                $query->where("status", $this->status);
+                $query->where("activities.status", $this->status);
             })
             ->when($this->type !== "all", function (Builder $query): void {
-                $query->where("type", $this->type);
+                $query->where("activities.type", $this->type);
             })
             ->when($this->company !== "all", function (Builder $query): void {
-                $query->where("company_id", (int) $this->company);
+                $query->where("activities.company_id", (int) $this->company);
             })
             ->when($this->contact !== "all", function (Builder $query): void {
-                $query->where("contact_id", (int) $this->contact);
+                $query->where("activities.contact_id", (int) $this->contact);
             })
             ->when($searchTerms->isNotEmpty(), function (Builder $query) use (
                 $searchTerms,
+                $user,
             ): void {
-                foreach ($searchTerms as $term) {
-                    $escapedTerm = addcslashes($term, "%_\\");
-                    $likeTerm = "%{$escapedTerm}%";
-
-                    $query->where(function (Builder $innerQuery) use (
-                        $likeTerm,
-                    ): void {
-                        $innerQuery
-                            ->where("name", "like", $likeTerm)
-                            ->orWhere("type", "like", $likeTerm)
-                            ->orWhere("status", "like", $likeTerm)
-                            ->orWhere("source", "like", $likeTerm)
-                            ->orWhere("notes", "like", $likeTerm)
-                            ->orWhereHas(
-                                "company",
-                                fn(
-                                    Builder $companyQuery,
-                                ): Builder => $companyQuery->where(
-                                    "name",
-                                    "like",
-                                    $likeTerm,
-                                ),
-                            )
-                            ->orWhereHas(
-                                "contact",
-                                fn(
-                                    Builder $contactQuery,
-                                ): Builder => $contactQuery->where(
-                                    "name",
-                                    "like",
-                                    $likeTerm,
-                                ),
-                            );
-                    });
-                }
+                $this->applySearchToActivityQuery(
+                    query: $query,
+                    searchTerms: $searchTerms,
+                    user: $user,
+                );
             });
 
-        $activities->orderBy($this->sort, $this->direction);
+        $activities->orderBy("activities." . $this->sort, $this->direction);
 
         return $activities
-            ->orderByDesc("id")
+            ->orderByDesc("activities.id")
             ->paginate($this->perPage)
             ->withQueryString();
     }
@@ -313,6 +287,141 @@ new #[Title("Activities")] class extends Component {
     public function directionLabel(): string
     {
         return $this->direction === "asc" ? __("Ascending") : __("Descending");
+    }
+
+    /**
+     * Apply search constraints to the activities query.
+     *
+     * @param Collection<int, string> $searchTerms
+     */
+    private function applySearchToActivityQuery(
+        Builder $query,
+        Collection $searchTerms,
+        User $user,
+    ): void {
+        if ($this->supportsFullTextSearch()) {
+            $booleanQuery = $this->buildFullTextBooleanQuery($searchTerms);
+
+            if ($booleanQuery !== null) {
+                $query->leftJoin("companies as activity_companies", function (
+                    JoinClause $join,
+                ) use ($user): void {
+                    $join
+                        ->on(
+                            "activity_companies.id",
+                            "=",
+                            "activities.company_id",
+                        )
+                        ->where("activity_companies.user_id", "=", $user->id);
+                });
+
+                $query->leftJoin("contacts as activity_contacts", function (
+                    JoinClause $join,
+                ) use ($user): void {
+                    $join
+                        ->on(
+                            "activity_contacts.id",
+                            "=",
+                            "activities.contact_id",
+                        )
+                        ->where("activity_contacts.user_id", "=", $user->id);
+                });
+
+                $query->where(function (Builder $innerQuery) use (
+                    $booleanQuery,
+                ): void {
+                    $innerQuery
+                        ->whereRaw(
+                            "MATCH (activities.name, activities.type, activities.status, activities.source, activities.notes) AGAINST (? IN BOOLEAN MODE)",
+                            [$booleanQuery],
+                        )
+                        ->orWhereRaw(
+                            "MATCH (activity_companies.name, activity_companies.legal_name, activity_companies.industry, activity_companies.source, activity_companies.email, activity_companies.phone, activity_companies.status, activity_companies.city, activity_companies.country) AGAINST (? IN BOOLEAN MODE)",
+                            [$booleanQuery],
+                        )
+                        ->orWhereRaw(
+                            "MATCH (activity_contacts.name, activity_contacts.email) AGAINST (? IN BOOLEAN MODE)",
+                            [$booleanQuery],
+                        );
+                });
+
+                return;
+            }
+        }
+
+        foreach ($searchTerms as $term) {
+            $escapedTerm = addcslashes($term, "%_\\");
+            $likeTerm = "%{$escapedTerm}%";
+
+            $query->where(function (Builder $innerQuery) use ($likeTerm): void {
+                $innerQuery
+                    ->where("activities.name", "like", $likeTerm)
+                    ->orWhere("activities.type", "like", $likeTerm)
+                    ->orWhere("activities.status", "like", $likeTerm)
+                    ->orWhere("activities.source", "like", $likeTerm)
+                    ->orWhere("activities.notes", "like", $likeTerm)
+                    ->orWhereHas(
+                        "company",
+                        fn(
+                            Builder $companyQuery,
+                        ): Builder => $companyQuery->where(
+                            "name",
+                            "like",
+                            $likeTerm,
+                        ),
+                    )
+                    ->orWhereHas(
+                        "contact",
+                        fn(
+                            Builder $contactQuery,
+                        ): Builder => $contactQuery->where(
+                            "name",
+                            "like",
+                            $likeTerm,
+                        ),
+                    );
+            });
+        }
+    }
+
+    private function supportsFullTextSearch(): bool
+    {
+        return in_array(
+            DB::connection()->getDriverName(),
+            ["mysql", "mariadb"],
+            true,
+        );
+    }
+
+    /**
+     * @param Collection<int, string> $searchTerms
+     */
+    private function buildFullTextBooleanQuery(Collection $searchTerms): ?string
+    {
+        $normalizedTerms = $searchTerms
+            ->map(function (string $term): string {
+                $sanitized = preg_replace("/[^\\pL\\pN@._-]+/u", "", $term);
+
+                return mb_strtolower((string) $sanitized);
+            })
+            ->filter(fn(string $term): bool => $term !== "")
+            ->values();
+
+        if ($normalizedTerms->isEmpty()) {
+            return null;
+        }
+
+        if (
+            $normalizedTerms->contains(
+                fn(string $term): bool => mb_strlen($term) < 3,
+            )
+        ) {
+            return null;
+        }
+
+        return $normalizedTerms
+            ->map(fn(string $term): string => "+{$term}*")
+            ->implode(" ");
     }
 
     /**

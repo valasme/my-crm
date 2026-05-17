@@ -6,6 +6,7 @@ use App\Concerns\ActivityValidationRules;
 use App\Models\Activity;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class UpdateActivityRequest extends FormRequest
 {
@@ -24,7 +25,34 @@ class UpdateActivityRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user() !== null;
+        $user = $this->user();
+
+        if ($user === null) {
+            return false;
+        }
+
+        $routeActivity = $this->route('activity');
+
+        $activityId =
+            $routeActivity instanceof Activity
+                ? $routeActivity->id
+                : (int) $routeActivity;
+
+        if ($activityId < 1) {
+            return false;
+        }
+
+        $activity = Activity::query()
+            ->select(['id', 'user_id'])
+            ->whereKey($activityId)
+            ->first();
+
+        return $activity !== null && $user->can('update', $activity);
+    }
+
+    protected function failedAuthorization(): void
+    {
+        throw new NotFoundHttpException;
     }
 
     /**

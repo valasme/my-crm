@@ -41,6 +41,41 @@ test('activities table has timeline sync aggregate indexes', function () {
         ->toBeTrue();
 });
 
+test('activities table has relationship timeline listing indexes', function () {
+    expect(
+        Schema::hasIndex(
+            'activities',
+            'activities_user_company_activity_date_id_index',
+        ),
+    )
+        ->toBeTrue()
+        ->and(
+            Schema::hasIndex('activities', [
+                'user_id',
+                'company_id',
+                'activity_at',
+                'id',
+            ]),
+        )
+        ->toBeTrue()
+        ->and(
+            Schema::hasIndex(
+                'activities',
+                'activities_user_contact_activity_date_id_index',
+            ),
+        )
+        ->toBeTrue()
+        ->and(
+            Schema::hasIndex('activities', [
+                'user_id',
+                'contact_id',
+                'activity_at',
+                'id',
+            ]),
+        )
+        ->toBeTrue();
+});
+
 test('tasks table has timeline sync aggregate indexes', function () {
     expect(Schema::hasIndex('tasks', 'tasks_user_company_status_task_at_index'))
         ->toBeTrue()
